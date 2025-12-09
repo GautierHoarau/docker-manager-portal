@@ -15,9 +15,9 @@ export default function LoginPage() {
 
   // Utilisateurs prédéfinis pour les tests
   const predefinedUsers = [
-    { email: 'admin@container-manager.com', password: 'admin123', role: 'Admin' },
-    { email: 'client1@example.com', password: 'client123', role: 'Client 1' },
-    { email: 'client2@example.com', password: 'client123', role: 'Client 2' }
+    { email: 'admin', password: 'admin123', role: 'Admin' },
+    { email: 'client1', password: 'client123', role: 'Client 1' },
+    { email: 'client2', password: 'client123', role: 'Client 2' }
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -66,14 +66,15 @@ export default function LoginPage() {
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email
+                Identifiant
               </label>
               <div className="mt-1">
                 <input
                   id="email"
                   name="email"
-                  type="email"
+                  type="text"
                   required
+                  placeholder="admin, client1, client2..."
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -129,7 +130,7 @@ export default function LoginPage() {
                   onClick={() => quickLogin(user.email, user.password)}
                   className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
                 >
-                  <span>{user.role} - {user.email}</span>
+                  <span>{user.role} - {user.email} / {user.password}</span>
                 </button>
               ))}
             </div>

@@ -1,10 +1,12 @@
-# Docker Compose for Container Manager Platform - Development Environment
+# Container Management Platform - Optimized for Fast Development
 services:
   # Backend API
   backend:
     build:
       context: ./dashboard-backend
       dockerfile: Dockerfile
+      cache_from:
+        - portail-cloud-container-backend:latest
     container_name: container-manager-backend
     privileged: true
     ports:
@@ -21,16 +23,19 @@ services:
       - container-manager-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # Frontend Dashboard
   frontend:
     build:
       context: ./dashboard-frontend
       dockerfile: Dockerfile
+      cache_from:
+        - portail-cloud-container-frontend:latest
     container_name: container-manager-frontend
     ports:
       - "3000:3000"
@@ -52,22 +57,7 @@ services:
 
 
 
-  # Redis (for session storage and caching)
-  redis:
-    image: redis:7-alpine
-    container_name: container-manager-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - container-manager-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+  # Redis removed - not needed for JWT authentication
 
   # Nginx (Reverse proxy and load balancer)
   nginx:
@@ -95,6 +85,4 @@ networks:
   container-manager-network:
     driver: bridge
 
-volumes:
-  redis-data:
-    driver: local
+# No volumes needed

@@ -12,8 +12,9 @@ Access: http://localhost
 
 ## Login
 
-- **Admin**: admin@containerplatform.com / admin123
-- **Client**: client1@example.com / client123
+- **Admin**: admin / admin123
+- **Client1**: client1 / client123
+- **Client2**: client2 / client123
 
 ## Features
 

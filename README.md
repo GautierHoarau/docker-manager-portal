@@ -1,16 +1,29 @@
 ﻿# 🚀 Container Management Platform
 
-**Plateforme professionnelle de gestion de conteneurs Docker avec infrastructure as code, CI/CD complet et déploiement Azure automatisé.**
+Plateforme de gestion de conteneurs Docker multi-tenant avec interface web moderne.
 
-## ✨ Caractéristiques
+## ⚡ Démarrage rapide
 
-- 🏗️ **Infrastructure as Code** avec Terraform
-- 🔄 **CI/CD Complet** avec build automatique 
-- 🗄️ **Base de données PostgreSQL** Azure Flexible Server
-- 🐳 **Applications Node.js** avec TypeScript
-- 🌐 **Multi-tenant** avec authentification JWT
-- ☁️ **Cloud Azure** App Services + Container Registry
-- 📊 **Monitoring** et logs intégrés
+```powershell
+.\start.ps1
+```
+
+## 🔐 Connexion
+
+- **Admin**: `admin` / `admin123`
+- **Client**: `client1` / `client123`
+
+## 🌐 Accès
+
+- **Web**: http://localhost:3000
+- **API**: http://localhost:5000
+
+## 🏗️ Architecture
+
+- **Backend**: Node.js + TypeScript + JWT
+- **Frontend**: Next.js + React
+- **Proxy**: Nginx
+- **Docker**: Alpine images optimisées
 
 ## 🚀 Déploiement Production (1 commande)
 
