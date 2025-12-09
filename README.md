@@ -1,29 +1,107 @@
 ﻿# 🚀 Container Management Platform
 
-Plateforme de gestion de conteneurs Docker avec déploiement direct Azure.
+**Plateforme professionnelle de gestion de conteneurs Docker avec infrastructure as code, CI/CD complet et déploiement Azure automatisé.**
 
-## ⚡ Déploiement ULTRA-RAPIDE (1 commande)
+## ✨ Caractéristiques
 
+- 🏗️ **Infrastructure as Code** avec Terraform
+- 🔄 **CI/CD Complet** avec build automatique 
+- 🗄️ **Base de données PostgreSQL** Azure Flexible Server
+- 🐳 **Applications Node.js** avec TypeScript
+- 🌐 **Multi-tenant** avec authentification JWT
+- ☁️ **Cloud Azure** App Services + Container Registry
+- 📊 **Monitoring** et logs intégrés
+
+## 🚀 Déploiement Production (1 commande)
+
+### Prérequis
 ```powershell
-# Connectez-vous à Azure
+# 1. Azure CLI + connexion
 az login
 
-# Déployez tout en 1 fois
-.\deploy-minimal.ps1
+# 2. Node.js + npm (automatiquement vérifié)
+# 3. Terraform (installation automatique si manquant)
 ```
 
-**C'est tout !** 🎉 
+### Déploiement Complet
+```powershell
+# Clone du repo
+git clone https://github.com/Sne3P/docker-manager-portal.git
+cd docker-manager-portal
 
-## 🌐 Résultat (2-3 minutes)
+# Déploiement TOUT-EN-UN
+.\deploy-production.ps1
+```
 
-- **Frontend :** `https://container-simple-web.azurewebsites.net`
-- **API :** `https://container-simple-api.azurewebsites.net/api/health`
+**C'est tout !** 🎉
+
+## 🎯 Résultat Garanti (10-15 minutes)
+
+Le script déploie automatiquement :
+
+✅ **Infrastructure Azure complète :**
+- Resource Group
+- PostgreSQL Flexible Server 
+- Azure Container Registry
+- App Service Plan Linux
+- 2 Web Apps (Backend + Frontend)
+
+✅ **Applications avec build complet :**
+- Backend TypeScript compilé
+- Frontend Next.js optimisé
+- Configuration environnement automatique
+- Base de données initialisée
+
+✅ **URLs de production :**
+- Frontend : `https://containerapp-web-prod.azurewebsites.net`
+- Backend API : `https://containerapp-api-prod.azurewebsites.net`
+- Health Check : `https://containerapp-api-prod.azurewebsites.net/api/health`
+
+## 🔧 Options Avancées
+
+```powershell
+# Déploiement personnalisé
+.\deploy-production.ps1 -ResourceGroup "mon-rg" -ProjectName "monapp" -Environment "staging"
+
+# Déploiement par étapes
+.\deploy-production.ps1 -SkipBuild     # Infrastructure seulement
+.\deploy-production.ps1 -SkipTerraform # Build et déploiement seulement
+```
+
+## 📊 Monitoring et Maintenance
+
+```powershell
+# Surveillance des logs
+az webapp log tail --resource-group rg-container-complete --name containerapp-api-prod
+
+# Tests de santé
+curl https://containerapp-api-prod.azurewebsites.net/api/health
+
+# Mise à jour du code
+git pull origin main
+.\deploy-production.ps1 -SkipTerraform
+```
 
 ## 🧹 Nettoyage
 
 ```powershell
-az group delete --name rg-container-simple --yes --no-wait
+az group delete --name rg-container-complete --yes --no-wait
 ```
+
+## 🎓 Pour l'Évaluation Académique
+
+**Déploiement ultra-simple pour le professeur :**
+
+1. `git clone https://github.com/Sne3P/docker-manager-portal.git`
+2. `cd docker-manager-portal`  
+3. `az login`
+4. `.\deploy-production.ps1`
+
+**Résultat :** Infrastructure cloud complète + application fonctionnelle en 10-15 minutes !
+
+---
+
+**🎯 Solution complète, professionnelle et reproductible sur n'importe quelle machine avec Azure CLI !**
 
 ## ✨ Features
 

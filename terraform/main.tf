@@ -13,6 +13,9 @@ terraform {
 
 # Configure Azure Provider
 provider "azurerm" {
+  # Disable automatic resource provider registration for Azure for Students
+  resource_provider_registrations = "none"
+  
   features {
     resource_group {
       prevent_deletion_if_contains_resources = false
@@ -36,7 +39,13 @@ variable "environment" {
 variable "location" {
   description = "Azure region for resources"
   type        = string
-  default     = "West Europe"
+  default     = "francecentral"
+}
+
+variable "resource_group_name" {
+  description = "Resource Group name"
+  type        = string
+  default     = ""
 }
 
 variable "admin_password" {
@@ -45,9 +54,49 @@ variable "admin_password" {
   sensitive   = true
 }
 
+variable "backend_app_name" {
+  description = "Backend App Service name"
+  type        = string
+  default     = ""
+}
+
+variable "frontend_app_name" {
+  description = "Frontend App Service name"
+  type        = string
+  default     = ""
+}
+
+variable "db_server_name" {
+  description = "Database server name"
+  type        = string
+  default     = ""
+}
+
+variable "container_registry_name" {
+  description = "Container Registry name"
+  type        = string
+  default     = ""
+}
+
+variable "app_service_plan_name" {
+  description = "App Service Plan name"
+  type        = string
+  default     = ""
+}
+
+# Locals for computed values
+locals {
+  resource_group_name = var.resource_group_name != "" ? var.resource_group_name : "rg-${var.project_name}-${var.environment}"
+  backend_app_name = var.backend_app_name != "" ? var.backend_app_name : "${var.project_name}-api-${var.environment}"
+  frontend_app_name = var.frontend_app_name != "" ? var.frontend_app_name : "${var.project_name}-web-${var.environment}"
+  db_server_name = var.db_server_name != "" ? var.db_server_name : "${var.project_name}-db-${var.environment}"
+  container_registry_name = var.container_registry_name != "" ? var.container_registry_name : "${replace(var.project_name, "-", "")}${var.environment}"
+  app_service_plan_name = var.app_service_plan_name != "" ? var.app_service_plan_name : "${var.project_name}-plan-${var.environment}"
+}
+
 # Resource Group
 resource "azurerm_resource_group" "main" {
-  name     = "rg-${var.project_name}-${var.environment}"
+  name     = local.resource_group_name
   location = var.location
 
   tags = {
@@ -59,7 +108,7 @@ resource "azurerm_resource_group" "main" {
 
 # Container Registry for Docker images
 resource "azurerm_container_registry" "main" {
-  name                = "acr${replace(var.project_name, "-", "")}${var.environment}"
+  name                = local.container_registry_name
   resource_group_name = azurerm_resource_group.main.name
   location           = azurerm_resource_group.main.location
   sku                = "Basic"
@@ -73,7 +122,7 @@ resource "azurerm_container_registry" "main" {
 
 # PostgreSQL Database for production data
 resource "azurerm_postgresql_flexible_server" "main" {
-  name                   = "psql-${var.project_name}-${var.environment}"
+  name                   = local.db_server_name
   resource_group_name    = azurerm_resource_group.main.name
   location              = azurerm_resource_group.main.location
   version               = "13"
@@ -99,7 +148,7 @@ resource "azurerm_postgresql_flexible_server_database" "main" {
 
 # App Service Plan for containers
 resource "azurerm_service_plan" "main" {
-  name                = "asp-${var.project_name}-${var.environment}"
+  name                = local.app_service_plan_name
   resource_group_name = azurerm_resource_group.main.name
   location           = azurerm_resource_group.main.location
   os_type            = "Linux"
@@ -113,7 +162,7 @@ resource "azurerm_service_plan" "main" {
 
 # Backend API App Service
 resource "azurerm_linux_web_app" "backend" {
-  name                = "app-${var.project_name}-api-${var.environment}"
+  name                = local.backend_app_name
   resource_group_name = azurerm_resource_group.main.name
   location           = azurerm_service_plan.main.location
   service_plan_id    = azurerm_service_plan.main.id
@@ -150,7 +199,7 @@ resource "azurerm_linux_web_app" "backend" {
 
 # Frontend App Service
 resource "azurerm_linux_web_app" "frontend" {
-  name                = "app-${var.project_name}-web-${var.environment}"
+  name                = local.frontend_app_name
   resource_group_name = azurerm_resource_group.main.name
   location           = azurerm_service_plan.main.location
   service_plan_id    = azurerm_service_plan.main.id
