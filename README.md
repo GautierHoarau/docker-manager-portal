@@ -68,52 +68,27 @@ open http://localhost
 - **Admin**: `admin` / `admin123`  
 - **Client**: `client1` / `client123`
 
-## ☁️ Azure Deployment
+## ☁️ **Professor Deployment (3 steps)**
 
-### Automated Deployment (Recommended)
+### 🎓 **Ultra-Simple for Evaluation:**
 
-1. **Fork this repository** to your GitHub account
+1. **Fork** this repository
+2. **Add 2 GitHub Secrets:**
+   - `AZURE_CREDENTIALS` → Create via [Azure Cloud Shell](https://shell.azure.com): 
+     ```bash
+     az ad sp create-for-rbac --name "github-sp" --role contributor --scopes "/subscriptions/$(az account show --query id -o tsv)" --sdk-auth
+     ```
+   - `DB_ADMIN_PASSWORD` → Any secure password (e.g., `SecurePass123!`)
+3. **Push to main** → Automatic deployment! 🚀
 
-2. **Configure GitHub Secrets**:
-   ```
-   AZURE_CREDENTIALS      # Azure service principal JSON
-   AZURE_RESOURCE_GROUP   # Target resource group name  
-   AZURE_REGISTRY_NAME    # Container registry name
-   AZURE_REGISTRY_USERNAME # Registry admin username
-   AZURE_REGISTRY_PASSWORD # Registry admin password
-   DB_ADMIN_PASSWORD      # Database password (secure)
-   ```
+**Result:** Complete Azure infrastructure + running application in 15 minutes!
 
-3. **Push to main branch** - Deployment starts automatically!
-
-### Manual Deployment
-
-```bash
-# 1. Azure Login
-az login
-
-# 2. Deploy Infrastructure  
-cd terraform
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
-terraform init
-terraform plan
-terraform apply
-
-# 3. Get deployment URLs
-terraform output backend_url
-terraform output frontend_url
-```
-
-## 🔒 Security & Production Ready
-
-- **Infrastructure as Code**: Complete Terraform deployment
-- **CI/CD Pipeline**: Automated testing and deployment
-- **JWT Authentication**: Secure token-based authentication  
-- **Role-Based Access**: Admin vs Client permissions
-- **Health Monitoring**: Built-in health checks
-- **Database Security**: Azure PostgreSQL with SSL
-- **Container Security**: Azure Container Registry
+### 🔧 **What Gets Deployed Automatically:**
+- ✅ Azure App Services (Frontend + Backend)
+- ✅ PostgreSQL Database with SSL
+- ✅ Container Registry + Images  
+- ✅ Application Gateway + Load Balancing
+- ✅ Health monitoring + Auto-scaling
 - Web Dashboard
 
 ## Services
