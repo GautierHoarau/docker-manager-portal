@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import containerRoutes from './routes/containers-prod';
 import healthRoutes from './routes/health';
+import adminRoutes from './routes/admin';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -48,6 +49,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/containers', containerRoutes);
+app.use('/api/admin', adminRoutes);
 
 
 

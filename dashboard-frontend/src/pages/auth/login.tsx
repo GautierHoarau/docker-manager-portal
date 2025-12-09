@@ -1,145 +1,150 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
-import Link from 'next/link';
 import { useAuth } from '../../hooks/useAuth';
+import { Icons } from '../../components/ui/Icons';
+import Button from '../../components/ui/Button';
 
-export default function LoginPage() {
-  const router = useRouter();
-  const { login } = useAuth();
+export default function Login() {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  // Utilisateurs prédéfinis pour les tests
-  const predefinedUsers = [
-    { email: 'admin', password: 'admin123', role: 'Admin' },
-    { email: 'client1', password: 'client123', role: 'Client 1' },
-    { email: 'client2', password: 'client123', role: 'Client 2' }
-  ];
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+    setLoading(true);
 
     try {
       await login(formData.email, formData.password);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Erreur de connexion');
+    } catch (error: any) {
+      setError(error.message || 'Login failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const quickLogin = (email: string, password: string) => {
-    setFormData({ email, password });
+  const quickLogin = (username: string, password: string) => {
+    setFormData({ email: username, password });
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white flex items-center justify-center px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            🐳 Container Manager
+          <div className="mx-auto w-16 h-16 bg-black rounded-2xl flex items-center justify-center mb-6 shadow-lg">
+            <Icons.Container size={32} className="text-white" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-3xl font-bold text-black tracking-tight">
+            Container Manager
           </h1>
-          <h2 className="text-2xl font-semibold text-gray-700">
-            Connexion à la plateforme
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Plateforme de gestion Docker multi-tenant
+          <p className="mt-3 text-gray-600 font-medium">
+            Multi-tenant Docker Platform
           </p>
         </div>
-      </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Identifiant
-              </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  name="email"
-                  type="text"
-                  required
-                  placeholder="admin, client1, client2..."
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+        <div className="mt-8">
+          <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+                <Icons.AlertCircle size={16} />
+                {error}
               </div>
-            </div>
+            )}
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Mot de passe
-              </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-semibold text-black mb-2">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.User size={18} className="text-gray-400" />
+                    </div>
+                    <input
+                      id="email"
+                      name="email"
+                      type="text"
+                      required
+                      placeholder="admin, client1, client2"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all duration-200 placeholder-gray-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="password" className="block text-sm font-semibold text-black mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icons.Lock size={18} className="text-gray-400" />
+                    </div>
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all duration-200"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <button
+              <Button
                 type="submit"
-                disabled={loading}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                  loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
-                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+                variant="primary"
+                size="lg"
+                isLoading={loading}
+                className="w-full"
               >
-                {loading ? 'Connexion...' : 'Se connecter'}
-              </button>
-            </div>
-          </form>
+                {loading ? 'Signing in...' : 'Sign In'}
+              </Button>
+            </form>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+            <div className="mt-8">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-4 text-gray-500 font-medium">Quick Access</span>
+                </div>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Connexion rapide</span>
+              <div className="mt-6 grid grid-cols-3 gap-2">
+                {[
+                  { username: 'admin', password: 'admin123', label: 'Admin', icon: Icons.Settings },
+                  { username: 'client1', password: 'client123', label: 'Client 1', icon: Icons.User },
+                  { username: 'client2', password: 'client123', label: 'Client 2', icon: Icons.User }
+                ].map((user) => (
+                  <Button
+                    key={user.username}
+                    onClick={() => quickLogin(user.username, user.password)}
+                    variant="outline"
+                    size="sm"
+                    className="flex-col h-auto py-3"
+                  >
+                    <user.icon size={16} className="mb-1" />
+                    <span className="text-xs font-medium">{user.label}</span>
+                  </Button>
+                ))}
               </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-3">
-              {predefinedUsers.map((user) => (
-                <button
-                  key={user.email}
-                  type="button"
-                  onClick={() => quickLogin(user.email, user.password)}
-                  className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50"
-                >
-                  <span>{user.role} - {user.email} / {user.password}</span>
-                </button>
-              ))}
             </div>
           </div>
         </div>
 
-        <div className="mt-8 text-center text-sm text-gray-600">
-          <p>🚀 Plateforme Container Manager</p>
-          <p>Gestion multi-tenant avec Docker</p>
+        <div className="mt-8 text-center">
+          <p className="text-xs text-gray-500 font-medium">Powered by Docker & Next.js</p>
         </div>
       </div>
     </div>

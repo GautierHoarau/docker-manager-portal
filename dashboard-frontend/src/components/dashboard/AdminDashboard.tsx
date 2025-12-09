@@ -1,20 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { api } from '../../lib/api';
+import { Icons } from '../ui/Icons';
+import Button from '../ui/Button';
 
 interface Client {
   id: string;
   name: string;
   email: string;
   createdAt: string;
+  isActive: boolean;
+  containerQuota: number;
+  usedContainers: number;
 }
 
 interface Container {
   id: string;
+  name: string;
   clientId: string;
   serviceType: string;
-  containerName: string;
   status: string;
+  image: string;
   url?: string;
   ports: any[];
   createdAt: string;
@@ -28,149 +34,220 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'overview' | 'clients' | 'containers'>('overview');
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user?.role === 'admin') {
+      loadAdminData();
+    }
+  }, [user]);
 
-  const loadData = async () => {
+  const loadAdminData = async () => {
     try {
       setLoading(true);
-      const [clientsData, containersData] = await Promise.all([
+      const [clientsRes, containersRes] = await Promise.all([
         api.get('/api/admin/clients'),
-        api.get('/api/containers')
+        api.get('/api/admin/containers')
       ]);
-      setClients(clientsData.data);
-      setContainers(containersData.data);
+      
+      setClients(clientsRes.data.data || []);
+      setContainers(containersRes.data.data || []);
     } catch (error) {
-      console.error('Erreur lors du chargement des données:', error);
+      console.error('Failed to load admin data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateService = async (clientId: string, serviceType: string) => {
+  const handleDeleteContainer = async (containerId: string) => {
+    if (!confirm('Are you sure you want to delete this container?')) {
+      return;
+    }
+
     try {
-      await api.post('/api/containers/predefined', {
-        clientId,
-        serviceType
-      });
-      loadData(); // Recharger les données
+      await api.post(`/api/admin/containers/${containerId}/delete`);
+      loadAdminData(); // Refresh data
     } catch (error) {
-      console.error('Erreur lors de la création du service:', error);
+      console.error('Failed to delete container:', error);
+      alert('Failed to delete container');
     }
   };
 
-  const handleDeleteContainer = async (containerId: string) => {
-    try {
-      await api.delete(`/api/containers/${containerId}`);
-      loadData(); // Recharger les données
-    } catch (error) {
-      console.error('Erreur lors de la suppression du conteneur:', error);
-    }
-  };
+  if (user?.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-red-600">Access Denied</h2>
+          <p className="text-gray-600 mt-2">Admin privileges required</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Chargement...</span>
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center mb-4">
+            <Icons.Loader size={24} className="text-gray-600" />
+          </div>
+          <p className="text-sm font-medium text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Tableau de bord Administrateur</h1>
-        <p className="text-gray-600">Gestion complète de la plateforme et des clients</p>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="border-b border-gray-200 pb-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center">
+            <Icons.Dashboard size={20} className="text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-black">Admin Dashboard</h1>
+            <p className="text-gray-600 text-sm">Platform management and client overview</p>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { key: 'overview', label: '📊 Vue d\'ensemble' },
-            { key: 'clients', label: '👥 Clients' },
-            { key: 'containers', label: '🐳 Conteneurs' }
-          ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key as any)}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === tab.key
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+      <div className="flex flex-col sm:flex-row gap-1 p-1 bg-gray-100 rounded-xl">
+        {[
+          { key: 'overview', label: 'Overview', icon: Icons.Dashboard },
+          { key: 'clients', label: 'Clients', icon: Icons.Users },
+          { key: 'containers', label: 'Containers', icon: Icons.Container }
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as any)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+              activeTab === tab.key
+                ? 'bg-white text-black shadow-sm'
+                : 'text-gray-600 hover:text-black hover:bg-white/50'
+            }`}
+          >
+            <tab.icon size={16} />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Clients</h3>
-            <p className="text-3xl font-bold text-blue-600">{clients.length}</p>
-            <p className="text-sm text-gray-500">Clients actifs sur la plateforme</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Conteneurs</h3>
-            <p className="text-3xl font-bold text-green-600">{containers.length}</p>
-            <p className="text-sm text-gray-500">Conteneurs déployés</p>
-          </div>
-          <div className="bg-white p-6 rounded-lg shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Conteneurs Actifs</h3>
-            <p className="text-3xl font-bold text-orange-600">
-              {containers.filter(c => c.status === 'running').length}
-            </p>
-            <p className="text-sm text-gray-500">Conteneurs en cours d'exécution</p>
+        <div className="animate-in fade-in duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              {
+                title: 'Total Clients',
+                value: clients.length,
+                description: 'Active platform clients',
+                icon: Icons.Users,
+                color: 'bg-blue-50 text-blue-600'
+              },
+              {
+                title: 'Total Containers',
+                value: containers.length,
+                description: 'Managed containers',
+                icon: Icons.Container,
+                color: 'bg-green-50 text-green-600'
+              },
+              {
+                title: 'Active Containers',
+                value: containers.filter(c => c.status === 'running').length,
+                description: 'Currently running',
+                icon: Icons.CheckCircle,
+                color: 'bg-emerald-50 text-emerald-600'
+              }
+            ].map((stat, index) => (
+              <div
+                key={stat.title}
+                className="group bg-white border border-gray-200 rounded-2xl p-6 hover:border-gray-300 hover:shadow-sm transition-all duration-200"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.color}`}>
+                    <stat.icon size={24} />
+                  </div>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-600 mb-2">{stat.title}</h3>
+                <p className="text-3xl font-bold text-black mb-1">{stat.value}</p>
+                <p className="text-xs text-gray-500">{stat.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Clients Tab */}
       {activeTab === 'clients' && (
-        <div className="bg-white shadow-sm rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Gestion des Clients</h3>
-            <div className="space-y-4">
-              {clients.map((client) => (
-                <div key={client.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-gray-900">{client.name}</h4>
-                      <p className="text-sm text-gray-500">{client.email}</p>
-                      <p className="text-xs text-gray-400">
-                        Créé le {new Date(client.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex space-x-2">
-                      <select
-                        className="text-sm border border-gray-300 rounded-md px-2 py-1"
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            handleCreateService(client.id, e.target.value);
-                            e.target.value = '';
-                          }
-                        }}
-                      >
-                        <option value="">Créer un service...</option>
-                        <option value="nginx">🌐 Nginx Web Server</option>
-                        <option value="nodejs">🟢 Node.js App</option>
-                        <option value="python">🐍 Python App</option>
-                        <option value="database">🗄️ Base de données</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-600">
-                      Conteneurs: {containers.filter(c => c.clientId === client.id).length}
-                    </p>
-                  </div>
-                </div>
-              ))}
+        <div className="animate-in fade-in duration-300">
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-lg font-semibold text-black flex items-center gap-2">
+                <Icons.Users size={20} />
+                Clients ({clients.length})
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Client
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Email
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Containers
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {clients.map((client, index) => (
+                    <tr 
+                      key={client.id} 
+                      className="hover:bg-gray-50 transition-colors duration-150"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                            <Icons.User size={16} className="text-gray-600" />
+                          </div>
+                          <div className="text-sm font-semibold text-black">{client.name}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-600">{client.email}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700">
+                          <Icons.User size={12} />
+                          Client
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+                          <Icons.Container size={14} />
+                          {containers.filter(c => c.clientId === client.id).length}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
+                          <Icons.CheckCircle size={12} />
+                          Active
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -178,79 +255,86 @@ export default function AdminDashboard() {
 
       {/* Containers Tab */}
       {activeTab === 'containers' && (
-        <div className="bg-white shadow-sm rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Tous les Conteneurs</h3>
+        <div className="animate-in fade-in duration-300">
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+              <h2 className="text-lg font-semibold text-black flex items-center gap-2">
+                <Icons.Container size={20} />
+                Containers ({containers.length})
+              </h2>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Conteneur
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Container
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Client
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Image
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Service
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Owner
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Statut
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      URL
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {containers.map((container) => {
-                    const client = clients.find(c => c.id === container.clientId);
+                  {containers.map((container, index) => {
+                    const statusConfig = {
+                      running: { color: 'bg-green-100 text-green-700', icon: Icons.CheckCircle },
+                      stopped: { color: 'bg-red-100 text-red-700', icon: Icons.XCircle },
+                      pending: { color: 'bg-yellow-100 text-yellow-700', icon: Icons.AlertCircle }
+                    };
+                    
+                    const status = statusConfig[container.status as keyof typeof statusConfig] || statusConfig.pending;
+                    
                     return (
-                      <tr key={container.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {container.containerName}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {client?.name || container.clientId}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {container.serviceType}
+                      <tr 
+                        key={container.id} 
+                        className="hover:bg-gray-50 transition-colors duration-150"
+                        style={{ animationDelay: `${index * 50}ms` }}
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                              <Icons.Container size={16} className="text-gray-600" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold text-black">{container.name}</div>
+                              <div className="text-xs text-gray-500 font-mono">{container.id.substring(0, 12)}...</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                            container.status === 'running'
-                              ? 'bg-green-100 text-green-800'
-                              : container.status === 'stopped'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
+                          <div className="text-sm text-gray-600 font-mono">{container.image}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Icons.User size={14} />
+                            {clients.find(c => c.id === container.clientId)?.name || container.clientId}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-full ${status.color}`}>
+                            <status.icon size={12} />
                             {container.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {container.url ? (
-                            <a
-                              href={container.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-900"
-                            >
-                              {container.url}
-                            </a>
-                          ) : (
-                            '-'
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          <button
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <Button
                             onClick={() => handleDeleteContainer(container.id)}
-                            className="text-red-600 hover:text-red-900 text-sm font-medium"
+                            variant="danger"
+                            size="xs"
+                            leftIcon={<Icons.Trash size={14} />}
                           >
-                            🗑️ Supprimer
-                          </button>
+                            Delete
+                          </Button>
                         </td>
                       </tr>
                     );
