@@ -57,17 +57,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDeleteContainer = async (containerId: string) => {
-    if (!confirm('Are you sure you want to delete this container?')) {
+  const handleContainerAction = async (containerId: string, action: 'start' | 'stop' | 'restart' | 'remove') => {
+    if (action === 'remove' && !confirm('Are you sure you want to delete this container?')) {
       return;
     }
 
     try {
-      await api.post(`/api/admin/containers/${containerId}/delete`);
+      await api.post(`/api/admin/containers/${containerId}/${action}`);
       loadAdminData(); // Refresh data
     } catch (error) {
-      console.error('Failed to delete container:', error);
-      alert('Failed to delete container');
+      console.error(`Failed to ${action} container:`, error);
+      alert(`Failed to ${action} container`);
     }
   };
 
@@ -290,6 +290,7 @@ export default function AdminDashboard() {
                     const statusConfig = {
                       running: { color: 'bg-green-100 text-green-700', icon: Icons.CheckCircle },
                       stopped: { color: 'bg-red-100 text-red-700', icon: Icons.XCircle },
+                      exited: { color: 'bg-red-100 text-red-700', icon: Icons.XCircle },
                       pending: { color: 'bg-yellow-100 text-yellow-700', icon: Icons.AlertCircle }
                     };
                     
@@ -328,14 +329,35 @@ export default function AdminDashboard() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                          <Button
-                            onClick={() => handleDeleteContainer(container.id)}
-                            variant="danger"
-                            size="xs"
-                            leftIcon={<Icons.Trash size={14} />}
-                          >
-                            Delete
-                          </Button>
+                          <div className="flex items-center gap-2 justify-end">
+                            {container.status === 'running' ? (
+                              <Button
+                                onClick={() => handleContainerAction(container.id, 'stop')}
+                                variant="outline"
+                                size="xs"
+                                leftIcon={<Icons.Pause size={14} />}
+                              >
+                                Stop
+                              </Button>
+                            ) : (
+                              <Button
+                                onClick={() => handleContainerAction(container.id, 'start')}
+                                variant="secondary"
+                                size="xs"
+                                leftIcon={<Icons.Play size={14} />}
+                              >
+                                Start
+                              </Button>
+                            )}
+                            <Button
+                              onClick={() => handleContainerAction(container.id, 'remove')}
+                              variant="danger"
+                              size="xs"
+                              leftIcon={<Icons.Trash size={14} />}
+                            >
+                              Delete
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );

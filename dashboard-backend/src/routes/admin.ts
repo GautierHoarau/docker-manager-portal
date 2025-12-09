@@ -13,6 +13,7 @@
 import express, { Response } from 'express';
 import { AuthRequest, authenticate, authorize } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { dockerService } from '../services/dockerService';
 
 const router = express.Router();
 
@@ -28,27 +29,24 @@ router.use(authorize(['admin']));
  */
 router.get('/clients', async (req: AuthRequest, res: Response) => {
   try {
-    // Mock clients data - in production, this would come from database
-    const clients = [
-      {
-        id: 'client-1',
-        name: 'Client One',
-        email: 'client1@example.com',
-        createdAt: new Date('2024-01-01').toISOString(),
+    // Get real clients from container data
+    const containers = await dockerService.listContainers();
+    
+    // Extract unique client IDs from containers
+    const clientIds = [...new Set(containers.map((c: any) => c.clientId).filter((id: any) => id && id !== 'unknown'))];
+    
+    const clients = (clientIds as string[]).map((clientId: string) => {
+      const clientContainers = containers.filter((c: any) => c.clientId === clientId);
+      return {
+        id: clientId,
+        name: clientId.replace('-', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+        email: `${clientId}@example.com`,
+        createdAt: new Date().toISOString(),
         isActive: true,
-        containerQuota: 5,
-        usedContainers: 2
-      },
-      {
-        id: 'client-2',
-        name: 'Client Two', 
-        email: 'client2@example.com',
-        createdAt: new Date('2024-01-15').toISOString(),
-        isActive: true,
-        containerQuota: 3,
-        usedContainers: 1
-      }
-    ];
+        containerQuota: 10,
+        usedContainers: clientContainers.length
+      };
+    });
 
     logger.info(`Admin ${req.user?.email} retrieved clients list`);
     
@@ -72,47 +70,29 @@ router.get('/clients', async (req: AuthRequest, res: Response) => {
  */
 router.get('/containers', async (req: AuthRequest, res: Response) => {
   try {
-    // Mock containers data - in production, this would come from Docker API
-    const containers = [
-      {
-        id: 'container-1',
-        name: 'client1-nginx-web',
-        clientId: 'client-1',
-        serviceType: 'web',
-        status: 'running',
-        image: 'nginx:alpine',
-        ports: [{ containerPort: 80, hostPort: 8080 }],
-        createdAt: new Date('2024-01-02').toISOString(),
-        url: 'http://localhost:8080'
-      },
-      {
-        id: 'container-2',
-        name: 'client1-nodejs-api',
-        clientId: 'client-1',
-        serviceType: 'api',
-        status: 'running',
-        image: 'node:18-alpine',
-        ports: [{ containerPort: 3000, hostPort: 8081 }],
-        createdAt: new Date('2024-01-03').toISOString(),
-        url: 'http://localhost:8081'
-      },
-      {
-        id: 'container-3',
-        name: 'client2-python-worker',
-        clientId: 'client-2',
-        serviceType: 'worker',
-        status: 'exited',
-        image: 'python:3.9-alpine',
-        ports: [],
-        createdAt: new Date('2024-01-16').toISOString()
-      }
-    ];
+    // Get real containers from Docker API
+    const containers = await dockerService.listContainers();
+    
+    // Filter out management containers and format for admin view
+    const adminContainers = containers
+      .filter((container: any) => !container.name?.includes('container-manager'))
+      .map((container: any) => ({
+        id: container.id,
+        name: container.name,
+        clientId: container.clientId || 'unknown',
+        serviceType: container.serviceType || 'custom',
+        status: container.status,
+        image: container.image,
+        ports: container.ports,
+        createdAt: container.created,
+        url: container.url
+      }));
 
     logger.info(`Admin ${req.user?.email} retrieved all containers`);
     
     res.json({
       success: true,
-      data: containers
+      data: adminContainers
     });
   } catch (error) {
     logger.error('Admin get containers error:', error);
@@ -190,6 +170,30 @@ router.post('/containers/:id/:action', async (req: AuthRequest, res: Response) =
       return res.status(400).json({
         success: false,
         message: 'Invalid action'
+      });
+    }
+
+    // Perform the actual Docker action
+    try {
+      switch (action) {
+        case 'start':
+          await dockerService.startContainer(id);
+          break;
+        case 'stop':
+          await dockerService.stopContainer(id);
+          break;
+        case 'restart':
+          await dockerService.restartContainer(id);
+          break;
+        case 'remove':
+          await dockerService.removeContainer(id);
+          break;
+      }
+    } catch (dockerError: any) {
+      logger.error(`Docker ${action} failed for container ${id}:`, dockerError);
+      return res.status(500).json({
+        success: false,
+        message: `Failed to ${action} container: ${dockerError.message}`
       });
     }
 
