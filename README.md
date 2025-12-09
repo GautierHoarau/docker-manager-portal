@@ -1,23 +1,36 @@
-﻿# Container Management Platform 🐳
+﻿# 🚀 Container Management Platform
 
 [![Deploy to Azure](https://github.com/Sne3P/docker-manager-portal/actions/workflows/deploy.yml/badge.svg)](https://github.com/Sne3P/docker-manager-portal/actions/workflows/deploy.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Azure](https://img.shields.io/badge/Azure-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com/)
 
-> **Production-ready multi-tenant container management platform with automated cloud deployment**
+Plateforme moderne de gestion de conteneurs Docker avec déploiement automatique Azure.
 
-A secure, scalable platform for managing Docker containers across multiple clients with role-based access control, built with modern cloud-native technologies.
+## 🎯 Déploiement Ultra-Simple (3 Étapes)
 
-## 📋 Table of Contents
+### Étape 1 : Azure Cloud Shell
+Allez sur **https://shell.azure.com** et exécutez :
+```bash
+az ad sp create-for-rbac --name "github-container-platform" --role contributor --scopes /subscriptions/$(az account show --query id -o tsv) --json-auth
+```
+**Copiez tout le JSON affiché** ⬇️
 
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Quick Start](#-quick-start)
-- [Azure Deployment](#-azure-deployment)
-- [Local Development](#-local-development)
-- [API Documentation](#-api-documentation)
-- [Security](#-security)
+### Étape 2 : GitHub Secrets
+1. **GitHub** → **Settings** → **Secrets and variables** → **Actions**
+2. Créez 2 secrets :
+   - `AZURE_CREDENTIALS` : Collez le JSON de l'étape 1
+   - `DB_ADMIN_PASSWORD` : `MySecurePassword123!`
+
+### Étape 3 : Déploiement
+```bash
+git push origin main
+```
+
+**C'est tout !** 🎉 Le déploiement automatique se lance !
+
+## 🌐 Résultat
+
+Après déploiement (5-10 minutes), votre application sera disponible :
+- **Frontend :** `https://container-platform-web.azurewebsites.net`
+- **API :** `https://container-platform-api.azurewebsites.net`
 
 ## ✨ Features
 
