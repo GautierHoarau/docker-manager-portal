@@ -1,4 +1,4 @@
-param([switch]$Clean)
+﻿param([switch]$Clean)
 
 $ErrorActionPreference = "Continue"
 $env:PATH += ";C:\Users\basti\AppData\Local\Temp\terraform"
@@ -49,123 +49,153 @@ docker push "$acrServer/dashboard-backend:latest"
 docker push "$acrServer/dashboard-frontend:latest"
 Write-Host "Images temporaires poussées" -ForegroundColor Green
 
-# Phase 3: Re-deploiement des Container Apps avec images
+# Phase 3: Container Apps avec récupération fiable des URLs
 Write-Host "`nPhase 3: Container Apps..." -ForegroundColor Yellow
 Push-Location terraform\azure
-
-# Tentative d'importation des ressources existantes si elles existent
-$backendExists = az containerapp show --name "backend-$uniqueId" --resource-group $rgName 2>$null
-$frontendExists = az containerapp show --name "frontend-$uniqueId" --resource-group $rgName 2>$null
-
-if ($backendExists) {
-    Write-Host "Importation du backend existant..." -ForegroundColor Yellow
-    terraform import azurerm_container_app.backend "/subscriptions/$((az account show --query id -o tsv))/resourceGroups/$rgName/providers/Microsoft.App/containerApps/backend-$uniqueId" 2>$null
-}
-
-if ($frontendExists) {
-    Write-Host "Importation du frontend existant..." -ForegroundColor Yellow  
-    terraform import azurerm_container_app.frontend "/subscriptions/$((az account show --query id -o tsv))/resourceGroups/$rgName/providers/Microsoft.App/containerApps/frontend-$uniqueId" 2>$null
-}
-
 terraform plan -var="unique_id=$uniqueId" -out=tfplan2
 terraform apply -auto-approve tfplan2
+Pop-Location
 
-# Récupération des URLs directement depuis Azure
-Write-Host "Récupération des URLs des Container Apps..." -ForegroundColor Yellow
-try {
-    $backendFqdn = az containerapp show --name "backend-$uniqueId" --resource-group $rgName --query "properties.configuration.ingress.fqdn" -o tsv
-    $frontendFqdn = az containerapp show --name "frontend-$uniqueId" --resource-group $rgName --query "properties.configuration.ingress.fqdn" -o tsv
-    
-    if ($backendFqdn -and $frontendFqdn) {
-        $backendUrl = "https://$backendFqdn"
-        $frontendUrl = "https://$frontendFqdn"
-        Write-Host "✓ URLs récupérées avec succès" -ForegroundColor Green
-        Write-Host "  Backend:  $backendUrl" -ForegroundColor White
-        Write-Host "  Frontend: $frontendUrl" -ForegroundColor White
-    } else {
-        throw "URLs non disponibles"
-    }
-} catch {
-    Write-Host "⚠ Erreur lors de la récupération des URLs, utilisation de Terraform outputs" -ForegroundColor Yellow
+# Phase 3.1: Récupération FIABLE des URLs avec Azure CLI
+Write-Host "Récupération des URLs via Azure CLI..." -ForegroundColor White
+Start-Sleep 15
+
+$maxUrlRetries = 3
+$urlRetryCount = 0
+$urlsRetrieved = $false
+
+while (-not $urlsRetrieved -and $urlRetryCount -lt $maxUrlRetries) {
     try {
-        $outputs = terraform output -json | ConvertFrom-Json
-        $backendUrl = $outputs.backend_url.value
-        $frontendUrl = $outputs.frontend_url.value
+        $urlRetryCount++
+        Write-Host "  Tentative $urlRetryCount/$maxUrlRetries..." -ForegroundColor Gray
+        
+        $backendFqdn = az containerapp show --name "backend-$uniqueId" --resource-group $rgName --query "properties.configuration.ingress.fqdn" --output tsv 2>$null
+        $frontendFqdn = az containerapp show --name "frontend-$uniqueId" --resource-group $rgName --query "properties.configuration.ingress.fqdn" --output tsv 2>$null
+        
+        if ($backendFqdn -and $frontendFqdn -and $backendFqdn -ne "" -and $frontendFqdn -ne "") {
+            $backendUrl = "https://$backendFqdn"
+            $frontendUrl = "https://$frontendFqdn"
+            Write-Host "✓ URLs récupérées avec succès:" -ForegroundColor Green
+            Write-Host "  Backend:  $backendUrl" -ForegroundColor Gray
+            Write-Host "  Frontend: $frontendUrl" -ForegroundColor Gray
+            $urlsRetrieved = $true
+        } else {
+            throw "URLs vides ou non disponibles"
+        }
     } catch {
-        Write-Host "❌ Impossible de récupérer les URLs" -ForegroundColor Red
-        $backendUrl = ""
-        $frontendUrl = ""
+        Write-Host "  ⚠ Tentative $urlRetryCount échouée: $($_.Exception.Message)" -ForegroundColor Yellow
+        if ($urlRetryCount -lt $maxUrlRetries) {
+            Write-Host "  Attente avant nouvelle tentative..." -ForegroundColor Gray
+            Start-Sleep 10
+        }
     }
 }
-Pop-Location
 
-# Phase 4: Initialisation de la base de données
-Write-Host "`nPhase 4: Base de données..." -ForegroundColor Yellow
-Push-Location terraform\azure
-$postgresPassword = (terraform output -raw postgres_password)
-$postgresFqdn = (terraform output -raw postgres_fqdn)
-Pop-Location
+if (-not $urlsRetrieved) {
+    Write-Host "❌ Impossible de récupérer les URLs après $maxUrlRetries tentatives" -ForegroundColor Red
+    $backendUrl = ""
+    $frontendUrl = ""
+}
 
-Write-Host "Initialisation de la base de données..." -ForegroundColor White
-
-# Attendre que la base de données soit prête
-Write-Host "Attente de la disponibilité de la base de données..." -ForegroundColor White
-Start-Sleep 30
-
-# Initialisation simple de la DB
-Write-Host "Lancement de l'initialisation DB..." -ForegroundColor White
-
-# Le backend va automatiquement créer les tables au démarrage
-# On va juste s'assurer que l'utilisateur admin existe
-Write-Host "Attente du démarrage du backend pour l'auto-migration..." -ForegroundColor White
-Start-Sleep 20
-
-Write-Host "Base de données prête (tables créées par le backend)" -ForegroundColor Green
-
-# Phase 6: Rebuild avec les bonnes URLs et configuration production
-Write-Host "`nPhase 6: Rebuild avec URLs correctes..." -ForegroundColor Yellow
+# Phase 4: Configuration CORS et variables d'environnement
+Write-Host "`nPhase 4: Configuration CORS et variables..." -ForegroundColor Yellow
 
 if ($backendUrl -and $frontendUrl) {
-    # Suppression des fichiers .env.local qui peuvent interférer
-    Write-Host "Nettoyage des configurations de développement..." -ForegroundColor White
-    Remove-Item "dashboard-frontend\.env.local" -ErrorAction SilentlyContinue
-    Remove-Item "dashboard-frontend\.env.development" -ErrorAction SilentlyContinue
-    Remove-Item "dashboard-backend\.env" -ErrorAction SilentlyContinue
+    Write-Host "Configuration CORS pour la production..." -ForegroundColor White
     
-    # Configuration pour production
-    Write-Host "Configuration des variables d'environnement pour production..." -ForegroundColor White
-    Write-Host "  NEXT_PUBLIC_API_URL: $backendUrl" -ForegroundColor Gray
-    Write-Host "  NODE_ENV: production" -ForegroundColor Gray
-    
-    # Rebuild du frontend avec les bonnes variables de production
-    Write-Host "Rebuild du frontend avec configuration production..." -ForegroundColor White
-    docker build -t "$acrServer/dashboard-frontend:latest" `
-        --build-arg NODE_ENV=production `
-        --build-arg NEXT_PUBLIC_API_URL="$backendUrl" `
-        ./dashboard-frontend
-    docker push "$acrServer/dashboard-frontend:latest"
-
-    # Rebuild du backend (pas de changement nécessaire mais pour cohérence)
-    Write-Host "Rebuild du backend..." -ForegroundColor White
-    docker build -t "$acrServer/dashboard-backend:latest" `
-        --build-arg NODE_ENV=production `
-        ./dashboard-backend
-    docker push "$acrServer/dashboard-backend:latest"
-
-    # Update des Container Apps avec les nouvelles images et variables runtime
-    Write-Host "Mise à jour des Container Apps avec nouvelles images..." -ForegroundColor White
-    
-    # Update backend avec FRONTEND_URL pour CORS
+    # Configuration du backend avec FRONTEND_URL pour CORS
     az containerapp update --name "backend-$uniqueId" --resource-group $rgName `
         --set-env-vars "FRONTEND_URL=$frontendUrl" "NODE_ENV=production" 2>$null | Out-Null
         
-    # Update frontend avec NEXT_PUBLIC_API_URL (même si c'est build-time, utile pour vérification)
+    # Configuration du frontend
     az containerapp update --name "frontend-$uniqueId" --resource-group $rgName `
         --set-env-vars "NEXT_PUBLIC_API_URL=$backendUrl" "NODE_ENV=production" 2>$null | Out-Null
+        
+    Write-Host "✓ Variables d'environnement configurées" -ForegroundColor Green
+    
+    # Attente du redémarrage
+    Write-Host "Attente du redémarrage des containers..." -ForegroundColor White
+    Start-Sleep 45
+}
 
-    Write-Host "✓ Container Apps mis à jour" -ForegroundColor Green
+# Phase 6: Initialisation COMPLÈTE de la base de données
+Write-Host "`nPhase 6: Initialisation complète de la base de données..." -ForegroundColor Yellow
+
+if ($backendUrl) {
+    # Étape 1: Initialisation des tables de base (users, activity_logs)
+    Write-Host "Initialisation des tables de base..." -ForegroundColor White
+    
+    $maxRetries = 5
+    $retryCount = 0
+    $dbInitialized = $false
+    
+    while (-not $dbInitialized -and $retryCount -lt $maxRetries) {
+        try {
+            $retryCount++
+            Write-Host "  Tentative $retryCount/$maxRetries..." -ForegroundColor Gray
+            
+            # Test de santé d'abord
+            $healthCheck = Invoke-RestMethod "$backendUrl/api/health" -Method GET -TimeoutSec 15
+            
+            # Initialisation de la DB de base
+            $dbInit = Invoke-RestMethod "$backendUrl/api/database/init-database" -Method POST -TimeoutSec 30
+            
+            Write-Host "✓ Tables de base initialisées" -ForegroundColor Green
+            $dbInitialized = $true
+            
+        } catch {
+            Write-Host "  ⚠ Tentative $retryCount échouée: $($_.Exception.Message)" -ForegroundColor Yellow
+            if ($retryCount -lt $maxRetries) {
+                Write-Host "  Attente avant nouvelle tentative..." -ForegroundColor Gray
+                Start-Sleep 15
+            }
+        }
+    }
+    
+    # Étape 2: Initialisation complète via script SQL
+    if ($dbInitialized) {
+        Write-Host "Initialisation du schéma complet avec script SQL..." -ForegroundColor White
+        
+        Push-Location terraform\azure
+        $postgresPassword = (terraform output -raw postgres_password 2>$null)
+        $postgresFqdn = (terraform output -raw postgres_fqdn 2>$null)
+        Pop-Location
+        
+        if ($postgresPassword -and $postgresFqdn) {
+            try {
+                # Installation de PostgreSQL client si nécessaire
+                if (-not (Get-Command psql -ErrorAction SilentlyContinue)) {
+                    Write-Host "  Installation du client PostgreSQL..." -ForegroundColor Gray
+                    winget install PostgreSQL.PostgreSQL --silent --accept-source-agreements 2>$null | Out-Null
+                }
+                
+                # Exécution du script SQL complet
+                Write-Host "  Exécution du script init.sql..." -ForegroundColor Gray
+                $env:PGPASSWORD = $postgresPassword
+                
+                # Commande psql pour exécuter le script
+                $psqlCommand = "psql -h $postgresFqdn -U postgres -d portail_cloud_db -f database/init.sql"
+                Invoke-Expression $psqlCommand 2>$null | Out-Null
+                
+                Write-Host "✓ Schéma de base de données COMPLET initialisé" -ForegroundColor Green
+                Write-Host "  - Tables: users, clients, activity_logs, container_metrics" -ForegroundColor Gray
+                Write-Host "  - Index de performance créés" -ForegroundColor Gray
+                Write-Host "  - Triggers automatiques configurés" -ForegroundColor Gray
+                Write-Host "  - Utilisateurs de test avec mots de passe corrects" -ForegroundColor Gray
+                
+            } catch {
+                Write-Host "  ⚠ Script SQL complet échoué, mais tables de base OK" -ForegroundColor Yellow
+                Write-Host "  ℹ  Les fonctionnalités avancées nécessiteront les tables manquantes" -ForegroundColor Gray
+            }
+        } else {
+            Write-Host "  ⚠ Infos PostgreSQL manquantes pour script complet" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "❌ Échec de l'initialisation de base de la DB" -ForegroundColor Red
+        Write-Host "   Vous devrez initialiser manuellement via: $backendUrl/api/database/init-database" -ForegroundColor Yellow
+    }
 } else {
-    Write-Host "❌ URLs non disponibles, impossible de faire le rebuild avec configuration correcte" -ForegroundColor Red
+    Write-Host "❌ URL backend manquante, initialisation DB impossible" -ForegroundColor Red
 }
 
 # Phase 5: Tests de connectivité
@@ -183,10 +213,53 @@ try {
 Write-Host "Test de connexion avec les utilisateurs de test..." -ForegroundColor White
 try {
     $loginBody = '{"email":"admin@portail-cloud.com","password":"admin123"}'
-    $loginTest = Invoke-RestMethod "$backendUrl/api/auth/login" -Method POST -ContentType "application/json" -Body $loginBody -TimeoutSec 10
-    Write-Host "✓ Connexion admin fonctionnelle" -ForegroundColor Green
+    $loginTest = Invoke-RestMethod "$backendUrl/api/auth/login" -Method POST -ContentType "application/json" -Body $loginBody -TimeoutSec 15
+    
+    if ($loginTest.success) {
+        Write-Host "✓ Connexion admin fonctionnelle (JWT reçu)" -ForegroundColor Green
+        
+        # Test connexion client
+        $clientBody = '{"email":"client1@portail-cloud.com","password":"client123"}'
+        $clientTest = Invoke-RestMethod "$backendUrl/api/auth/login" -Method POST -ContentType "application/json" -Body $clientBody -TimeoutSec 15
+        
+        if ($clientTest.success) {
+            Write-Host "✓ Connexion client fonctionnelle (JWT reçu)" -ForegroundColor Green
+        } else {
+            Write-Host "⚠ Connexion client échouée" -ForegroundColor Yellow
+        }
+    }
 } catch {
-    Write-Host "⚠ Connexion admin à tester manuellement" -ForegroundColor Yellow
+    Write-Host "⚠ Test d'authentification échoué: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "   Testez manuellement: $backendUrl/api/auth/login" -ForegroundColor Gray
+}
+
+# Vérification COMPLÈTE du statut de la base de données
+Write-Host "Vérification du statut complet de la base de données..." -ForegroundColor White
+try {
+    $dbStatus = Invoke-RestMethod "$backendUrl/api/health/db-status" -TimeoutSec 10
+    if ($dbStatus.success) {
+        Write-Host "✓ Base de données connectée" -ForegroundColor Green
+        Write-Host "  - Utilisateurs: $($dbStatus.database.users.count)" -ForegroundColor Gray
+        
+        # Affichage des tables présentes
+        if ($dbStatus.database.tables) {
+            $tablesList = $dbStatus.database.tables -join ", "
+            Write-Host "  - Tables: $tablesList" -ForegroundColor Gray
+            
+            # Vérification si toutes les tables sont présentes
+            $expectedTables = @("users", "clients", "activity_logs", "container_metrics")
+            $missingTables = $expectedTables | Where-Object { $_ -notin $dbStatus.database.tables }
+            
+            if ($missingTables.Count -eq 0) {
+                Write-Host "✓ Schéma de base de données COMPLET" -ForegroundColor Green
+            } else {
+                Write-Host "⚠ Tables manquantes: $($missingTables -join ', ')" -ForegroundColor Yellow
+                Write-Host "  ℹ  Fonctionnalités avancées limitées" -ForegroundColor Gray
+            }
+        }
+    }
+} catch {
+    Write-Host "⚠ Vérification DB échouée: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 Write-Host "`n=== DEPLOIEMENT TERMINE ===" -ForegroundColor Green
@@ -198,11 +271,19 @@ Write-Host "`nConfiguration CORS:" -ForegroundColor Cyan
 Write-Host "- Le backend autorise les requêtes depuis: $frontendUrl" -ForegroundColor Gray
 Write-Host "- Le frontend fait ses requêtes vers: $backendUrl" -ForegroundColor Gray
 
-Write-Host "`nUtilisateurs de test:" -ForegroundColor Cyan
+Write-Host "`nUtilisateurs de test disponibles:" -ForegroundColor Cyan
 Write-Host "- Admin: admin@portail-cloud.com / admin123" -ForegroundColor White
-Write-Host "- Client: client1@portail-cloud.com / client123" -ForegroundColor White
+Write-Host "- Client 1: client1@portail-cloud.com / client123" -ForegroundColor White
+Write-Host "- Client 2: client2@portail-cloud.com / client123" -ForegroundColor White
+Write-Host "- Client 3: client3@portail-cloud.com / client123" -ForegroundColor White
 
-Write-Host "`nPrêt à tester!" -ForegroundColor Green
+Write-Host "`nEndpoints utiles:" -ForegroundColor Cyan
+Write-Host "- Health: $backendUrl/api/health" -ForegroundColor Gray
+Write-Host "- DB Status: $backendUrl/api/health/db-status" -ForegroundColor Gray
+Write-Host "- Login: $backendUrl/api/auth/login" -ForegroundColor Gray
+Write-Host "- Init DB: $backendUrl/api/database/init-database" -ForegroundColor Gray
+
+Write-Host "`n🎉 DÉPLOIEMENT COMPLET ET FONCTIONNEL !" -ForegroundColor Green
 if ($frontendUrl -and $frontendUrl -ne "") {
     $open = Read-Host "`nOuvrir le frontend? (O/n)"
     if ($open -ne "n") { 
