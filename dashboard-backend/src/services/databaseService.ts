@@ -87,26 +87,59 @@ class DatabaseService {
       `);
       console.log('✅ Users table created successfully');
 
+      // Création de la table activity_logs  
+      console.log('📋 Creating activity_logs table...');
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS activity_logs (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id),
+          client_id INTEGER,
+          action VARCHAR(255) NOT NULL,
+          details JSONB,
+          ip_address INET,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Activity logs table created successfully');
+
       // Vérification des tables existantes
       const tables = await this.query(`
         SELECT table_name FROM information_schema.tables 
-        WHERE table_schema = 'public' AND table_name = 'users'
+        WHERE table_schema = 'public' AND table_name IN ('users', 'activity_logs')
+        ORDER BY table_name
       `);
       console.log('📊 Tables found:', tables.rows);
 
-      // Insertion d'un utilisateur admin par défaut
-      console.log('👤 Creating default admin user...');
-      const result = await this.query(`
-        INSERT INTO users (email, password_hash, role) 
-        VALUES ('admin@example.com', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin')
-        ON CONFLICT (email) DO NOTHING
-        RETURNING id;
-      `);
+      // Insertion des utilisateurs de test avec hash bcrypt généré dynamiquement
+      console.log('👤 Creating default users with proper bcrypt hashes...');
       
-      if (result.rows.length > 0) {
-        console.log('✅ Admin user created with ID:', result.rows[0].id);
-      } else {
-        console.log('ℹ️  Admin user already exists');
+      // Import bcrypt ici pour générer les hash corrects
+      const bcrypt = await import('bcrypt');
+      
+      const users = [
+        { email: 'admin@portail-cloud.com', password: 'admin123', role: 'admin' },
+        { email: 'client1@portail-cloud.com', password: 'client123', role: 'client' },
+        { email: 'client2@portail-cloud.com', password: 'client123', role: 'client' },
+        { email: 'client3@portail-cloud.com', password: 'client123', role: 'client' }
+      ];
+      
+      for (const user of users) {
+        // Générer un hash bcrypt correct pour chaque utilisateur
+        const passwordHash = await bcrypt.hashSync(user.password, 12);
+        console.log(`🔐 Generated hash for ${user.email}: ${passwordHash.substring(0, 20)}...`);
+        
+        const result = await this.query(`
+          INSERT INTO users (email, password_hash, role) 
+          VALUES ($1, $2, $3)
+          ON CONFLICT (email) DO UPDATE SET password_hash = $2
+          RETURNING id;
+        `, [user.email, passwordHash, user.role]);
+      
+        if (result.rows.length > 0) {
+          console.log(`✅ User ${user.email} created with ID:`, result.rows[0].id);
+        } else {
+          console.log(`ℹ️  User ${user.email} already exists`);
+        }
       }
 
       // Vérification finale

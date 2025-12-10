@@ -140,6 +140,14 @@ resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_azure" {
   end_ip_address   = "0.0.0.0"
 }
 
+# Règle firewall pour permettre l'accès externe (pour les tests)
+resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_all" {
+  name             = "AllowAll"
+  server_id        = azurerm_postgresql_flexible_server.main.id
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "255.255.255.255"
+}
+
 # Outputs pour récupérer les informations importantes
 output "resource_group_name" {
   value = azurerm_resource_group.main.name
@@ -177,5 +185,14 @@ output "postgres_password" {
 
 output "jwt_secret" {
   value = random_password.jwt_secret.result
+  sensitive = true
+}
+
+output "postgres_database_name" {
+  value = azurerm_postgresql_flexible_server_database.main.name
+}
+
+output "database_url" {
+  value = "postgresql://postgres:${random_password.postgres_password.result}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/${azurerm_postgresql_flexible_server_database.main.name}?sslmode=require"
   sensitive = true
 }

@@ -11,6 +11,7 @@ import authRoutes from './routes/auth';
 import containerRoutes from './routes/containers-prod';
 import adminRoutes from './routes/admin';
 import healthRoutes from './routes/health';
+import databaseRoutes from './routes/database';
 
 
 // Import middleware
@@ -52,6 +53,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/containers', containerRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/database', databaseRoutes);
 
 
 

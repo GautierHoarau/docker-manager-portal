@@ -2,9 +2,12 @@
 const getApiBaseUrl = () => {
   // En production (Azure), utilise toujours NEXT_PUBLIC_API_URL si défini
   if (process.env.NODE_ENV === 'production') {
-    // En production, utiliser l'URL complète du backend + /api
     const backendUrl = process.env.NEXT_PUBLIC_API_URL;
-    return backendUrl ? `${backendUrl}/api` : 'http://localhost:5000/api';
+    if (backendUrl) {
+      // Si l'URL se termine déjà par /api, on la retourne telle quelle
+      return backendUrl.endsWith('/api') ? backendUrl : `${backendUrl}/api`;
+    }
+    return 'http://localhost:5000/api';
   }
   
   // En développement local
