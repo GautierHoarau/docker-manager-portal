@@ -15,6 +15,7 @@ import { AuthRequest, authenticate, authorize } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import ClientService from '../services/clientService';
 import { dockerService } from '../services/dockerService';
+import DatabaseService from '../services/databaseService';
 
 const router = express.Router();
 const clientService = new ClientService();
@@ -242,6 +243,99 @@ router.post('/containers/:id/:action', async (req: AuthRequest, res: Response) =
     res.status(500).json({
       success: false,
       message: 'Failed to perform container action'
+    });
+  }
+});
+
+/**
+ * POST /api/admin/init-database
+ * 
+ * Initialize database tables and default data (admin only)
+ */
+router.post('/init-database', async (req: AuthRequest, res: Response) => {
+  try {
+    logger.info('🔧 Manual database initialization requested by admin:', req.user?.email);
+    
+    const dbService = new DatabaseService();
+    await dbService.initializeTables();
+    
+    logger.info('✅ Database initialization completed successfully');
+    
+    res.json({
+      success: true,
+      message: 'Database initialized successfully',
+      timestamp: new Date().toISOString(),
+      initializedBy: req.user?.email
+    });
+  } catch (error: any) {
+    logger.error('❌ Database initialization failed:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Database initialization failed',
+      error: error.message,
+      details: {
+        code: error.code,
+        severity: error.severity,
+        detail: error.detail
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/admin/database-status
+ * 
+ * Check database status and table information (admin only)
+ */
+router.get('/database-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const dbService = new DatabaseService();
+    
+    // Test de connexion
+    const connectionTest = await dbService.query('SELECT 1 as test');
+    
+    // Vérification de l'existence de la table users
+    const tables = await dbService.query(`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_schema = 'public' AND table_name = 'users'
+    `);
+    
+    let userCount = 0;
+    let adminExists = false;
+    
+    if (tables.rows.length > 0) {
+      const countResult = await dbService.query('SELECT COUNT(*) as count FROM users');
+      userCount = parseInt(countResult.rows[0].count);
+      
+      const adminResult = await dbService.query('SELECT id FROM users WHERE email = $1', ['admin@example.com']);
+      adminExists = adminResult.rows.length > 0;
+    }
+    
+    res.json({
+      success: true,
+      database: {
+        connected: true,
+        tables: {
+          users: tables.rows.length > 0
+        },
+        data: {
+          userCount,
+          adminExists
+        }
+      },
+      timestamp: new Date().toISOString(),
+      checkedBy: req.user?.email
+    });
+  } catch (error: any) {
+    logger.error('Database status check failed:', error);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Database status check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });

@@ -6,7 +6,32 @@ export const useSocket = (url?: string) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    const socketUrl = url || process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+    const getSocketUrl = () => {
+      if (url) return url;
+      
+      // Socket URL spécifique si définie
+      if (process.env.NEXT_PUBLIC_SOCKET_URL) {
+        return process.env.NEXT_PUBLIC_SOCKET_URL;
+      }
+      
+      // En production, utilise l'URL du backend (même que l'API)
+      if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_API_URL) {
+        return process.env.NEXT_PUBLIC_API_URL;
+      }
+      
+      // En développement local
+      if (process.env.NODE_ENV === 'development') {
+        return 'http://localhost:5000';
+      }
+      
+      // Fallback pour production sans config explicite
+      return window.location.origin;
+    };
+    
+    const socketUrl = getSocketUrl();
+    
+    // Debug info pour Socket.IO
+    console.log('[Socket.IO] Connecting to:', socketUrl);
     const newSocket = io(socketUrl, {
       transports: ['websocket', 'polling'],
     });

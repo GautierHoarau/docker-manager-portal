@@ -5,16 +5,37 @@ class DatabaseService {
   private static instance: DatabaseService;
 
   constructor() {
-    const databaseUrl = process.env.DATABASE_URL || 
-      'postgresql://postgres:postgres123@localhost:5432/portail_cloud_db';
+    // Configuration flexible pour support des variables séparées ou DATABASE_URL
+    let poolConfig: any;
     
-    this.pool = new Pool({
-      connectionString: databaseUrl,
-      ssl: false, // Pas de SSL pour le développement local
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    });
+    if (process.env.POSTGRES_HOST) {
+      // Utilisation des variables d'environnement séparées (production Azure)
+      poolConfig = {
+        host: process.env.POSTGRES_HOST,
+        port: parseInt(process.env.POSTGRES_PORT || '5432'),
+        user: process.env.POSTGRES_USER || 'postgres',
+        password: process.env.POSTGRES_PASSWORD,
+        database: process.env.POSTGRES_DB || 'portail_cloud_db',
+        ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      };
+    } else {
+      // Utilisation de DATABASE_URL (développement local ou fallback)
+      const databaseUrl = process.env.DATABASE_URL || 
+        'postgresql://postgres:postgres123@localhost:5432/portail_cloud_db';
+      
+      poolConfig = {
+        connectionString: databaseUrl,
+        ssl: false, // Pas de SSL pour le développement local
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      };
+    }
+    
+    this.pool = new Pool(poolConfig);
 
     // Tester la connexion au démarrage
     this.testConnection();
@@ -40,6 +61,69 @@ class DatabaseService {
       } else {
         process.exit(1);
       }
+    }
+  }
+
+  public async initializeTables() {
+    try {
+      console.log('🔧 Initializing database tables...');
+      
+      // Test de connexion d'abord
+      await this.query('SELECT 1 as test');
+      console.log('✅ Database connection test successful');
+      
+      // Création de la table users
+      console.log('📋 Creating users table...');
+      await this.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password_hash VARCHAR(255) NOT NULL,
+          role VARCHAR(50) DEFAULT 'client' CHECK (role IN ('admin', 'client')),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          is_active BOOLEAN DEFAULT true
+        );
+      `);
+      console.log('✅ Users table created successfully');
+
+      // Vérification des tables existantes
+      const tables = await this.query(`
+        SELECT table_name FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'users'
+      `);
+      console.log('📊 Tables found:', tables.rows);
+
+      // Insertion d'un utilisateur admin par défaut
+      console.log('👤 Creating default admin user...');
+      const result = await this.query(`
+        INSERT INTO users (email, password_hash, role) 
+        VALUES ('admin@example.com', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin')
+        ON CONFLICT (email) DO NOTHING
+        RETURNING id;
+      `);
+      
+      if (result.rows.length > 0) {
+        console.log('✅ Admin user created with ID:', result.rows[0].id);
+      } else {
+        console.log('ℹ️  Admin user already exists');
+      }
+
+      // Vérification finale
+      const userCount = await this.query('SELECT COUNT(*) as count FROM users');
+      console.log(`📈 Total users in database: ${userCount.rows[0].count}`);
+      
+      console.log('🎉 Database initialization completed successfully!');
+    } catch (error: any) {
+      console.error('❌ Database initialization failed:', error);
+      console.error('Error details:', {
+        message: error.message || 'Unknown error',
+        code: error.code || 'Unknown code',
+        severity: error.severity || 'Unknown severity',
+        detail: error.detail || 'No additional details',
+        hint: error.hint || 'No hints available'
+      });
+      throw error;
     }
   }
 

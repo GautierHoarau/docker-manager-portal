@@ -1,4 +1,24 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// Configuration automatique dev/prod avec support URLs dynamiques
+const getApiBaseUrl = () => {
+  // En production (Azure), utilise toujours NEXT_PUBLIC_API_URL si défini
+  if (process.env.NODE_ENV === 'production') {
+    // En production, utiliser l'URL complète du backend + /api
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+    return backendUrl ? `${backendUrl}/api` : 'http://localhost:5000/api';
+  }
+  
+  // En développement local
+  return 'http://localhost:5000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
+
+// Debug info pour vérifier la configuration
+if (typeof window !== 'undefined') {
+  console.log('[API Config] Environment:', process.env.NODE_ENV);
+  console.log('[API Config] API Base URL:', API_BASE_URL);
+  console.log('[API Config] NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+}
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -89,7 +109,7 @@ class ApiClient {
 
   // Méthodes spécifiques pour l'authentification
   async login(email: string, password: string) {
-    const response = await this.post('/api/auth/login', { email, password });
+    const response = await this.post('/auth/login', { email, password });
     if (response.data.token) {
       this.setToken(response.data.token);
     }

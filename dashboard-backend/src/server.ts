@@ -16,6 +16,7 @@ import healthRoutes from './routes/health';
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
+import DatabaseService from './services/databaseService';
 
 // Load environment variables
 dotenv.config();
@@ -66,11 +67,27 @@ app.use('*', (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  logger.info(`🚀 Container Manager Backend running on port ${PORT}`);
-  logger.info(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`🔗 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-});
+// Initialize database and start server
+const startServer = async () => {
+  // Start server first
+  app.listen(PORT, () => {
+    logger.info(`🚀 Container Manager Backend running on port ${PORT}`);
+    logger.info(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`🔗 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  });
+
+  // Try to initialize database (don't fail if it doesn't work)
+  try {
+    logger.info('🔧 Attempting automatic database initialization...');
+    const dbService = new DatabaseService();
+    await dbService.initializeTables();
+    logger.info('✅ Database tables initialized automatically');
+  } catch (error: any) {
+    logger.warn('⚠️  Automatic database initialization failed. Use /api/database/init-database endpoint to initialize manually.');
+    logger.warn('Database error:', error.message || 'Unknown error');
+  }
+};
+
+startServer();
 
 export default app;

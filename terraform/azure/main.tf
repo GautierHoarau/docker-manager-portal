@@ -22,16 +22,13 @@ provider "azurerm" {
 }
 
 # Variables
-variable "project_name" {
-  description = "Nom du projet"
+variable "unique_id" {
+  description = "Identifiant unique pour les noms des ressources"
   type        = string
-  default     = "portail-cloud"
-}
-
-variable "environment" {
-  description = "Environnement (dev, prod)"
-  type        = string
-  default     = "dev"
+  validation {
+    condition     = length(var.unique_id) <= 8 && can(regex("^[a-z0-9]+$", var.unique_id))
+    error_message = "L'unique_id doit être alphanumérique en minuscules et max 8 caractères."
+  }
 }
 
 variable "location" {
@@ -40,10 +37,7 @@ variable "location" {
   default     = "francecentral"
 }
 
-variable "admin_email" {
-  description = "Email de l'administrateur"
-  type        = string
-}
+
 
 # Génération de mots de passe sécurisés
 resource "random_password" "postgres_password" {
@@ -58,67 +52,59 @@ resource "random_password" "jwt_secret" {
 
 # Resource Group
 resource "azurerm_resource_group" "main" {
-  name     = "${var.project_name}-${var.environment}-rg"
+  name     = "rg-container-manager-${var.unique_id}"
   location = var.location
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
 # Container Registry pour stocker les images Docker
 resource "azurerm_container_registry" "main" {
-  name                = "${replace(var.project_name, "-", "")}${var.environment}acr"
+  name                = "acr${var.unique_id}"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   sku                 = "Basic"
   admin_enabled       = true
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
 # Log Analytics Workspace
 resource "azurerm_log_analytics_workspace" "main" {
-  name                = "${var.project_name}-${var.environment}-logs"
+  name                = "logs-${var.unique_id}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
 # Container Apps Environment
 resource "azurerm_container_app_environment" "main" {
-  name                       = "${var.project_name}-${var.environment}-env"
-  location                   = azurerm_resource_group.main.location
-  resource_group_name        = azurerm_resource_group.main.name
+  name                = "env-${var.unique_id}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
 # PostgreSQL Flexible Server pour la base de données
 resource "azurerm_postgresql_flexible_server" "main" {
-  name                = "${var.project_name}-${var.environment}-postgres"
+  name                = "postgres-${var.unique_id}"
   resource_group_name = azurerm_resource_group.main.name
   location            = azurerm_resource_group.main.location
   version             = "15"
@@ -133,10 +119,8 @@ resource "azurerm_postgresql_flexible_server" "main" {
   geo_redundant_backup_enabled = false
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
@@ -163,6 +147,10 @@ output "resource_group_name" {
 
 output "container_registry_login_server" {
   value = azurerm_container_registry.main.login_server
+}
+
+output "acr_name" {
+  value = azurerm_container_registry.main.name
 }
 
 output "container_registry_admin_username" {

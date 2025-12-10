@@ -1,9 +1,6 @@
-# Configuration Terraform pour les Container Apps avec les vraies images
-# À ajouter à la configuration existante
-
-# Container App - Backend (API Node.js)
+# Container Apps avec configuration production simple
 resource "azurerm_container_app" "backend" {
-  name                         = "${var.project_name}-${var.environment}-backend"
+  name                         = "backend-${var.unique_id}"
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
@@ -11,7 +8,7 @@ resource "azurerm_container_app" "backend" {
   template {
     container {
       name   = "backend"
-      image  = "${azurerm_container_registry.main.login_server}/portail-backend:latest"
+      image  = "${azurerm_container_registry.main.login_server}/dashboard-backend:latest"
       cpu    = 0.5
       memory = "1Gi"
 
@@ -34,6 +31,11 @@ resource "azurerm_container_app" "backend" {
         name  = "PORT"
         value = "80"
       }
+      
+      env {
+        name  = "FRONTEND_URL"
+        value = "*"
+      }
     }
 
     min_replicas = 1
@@ -43,16 +45,15 @@ resource "azurerm_container_app" "backend" {
   ingress {
     external_enabled = true
     target_port      = 80
-    
     traffic_weight {
+      percentage = 100
       latest_revision = true
-      percentage      = 100
     }
   }
 
   registry {
-    server   = azurerm_container_registry.main.login_server
-    username = azurerm_container_registry.main.admin_username
+    server               = azurerm_container_registry.main.login_server
+    username             = azurerm_container_registry.main.admin_username
     password_secret_name = "registry-password"
   }
 
@@ -62,16 +63,13 @@ resource "azurerm_container_app" "backend" {
   }
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
-# Container App - Frontend (Next.js)
 resource "azurerm_container_app" "frontend" {
-  name                         = "${var.project_name}-${var.environment}-frontend"
+  name                         = "frontend-${var.unique_id}"
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
@@ -79,7 +77,7 @@ resource "azurerm_container_app" "frontend" {
   template {
     container {
       name   = "frontend"
-      image  = "${azurerm_container_registry.main.login_server}/portail-frontend:latest"
+      image  = "${azurerm_container_registry.main.login_server}/dashboard-frontend:latest"
       cpu    = 0.5
       memory = "1Gi"
 
@@ -90,7 +88,7 @@ resource "azurerm_container_app" "frontend" {
 
       env {
         name  = "NEXT_PUBLIC_API_URL"
-        value = "https://${azurerm_container_app.backend.latest_revision_fqdn}"
+        value = "*"
       }
 
       env {
@@ -106,16 +104,15 @@ resource "azurerm_container_app" "frontend" {
   ingress {
     external_enabled = true
     target_port      = 80
-    
     traffic_weight {
+      percentage = 100
       latest_revision = true
-      percentage      = 100
     }
   }
 
   registry {
-    server   = azurerm_container_registry.main.login_server
-    username = azurerm_container_registry.main.admin_username
+    server               = azurerm_container_registry.main.login_server
+    username             = azurerm_container_registry.main.admin_username
     password_secret_name = "registry-password"
   }
 
@@ -125,18 +122,16 @@ resource "azurerm_container_app" "frontend" {
   }
 
   tags = {
-    Environment = var.environment
-    Project     = var.project_name
+    Environment = "production"
     ManagedBy   = "Terraform"
-    Owner       = var.admin_email
   }
 }
 
-# Outputs pour les URLs des applications
+# Outputs
 output "frontend_url" {
-  value = "https://${azurerm_container_app.frontend.latest_revision_fqdn}"
+  value = "https://${azurerm_container_app.frontend.ingress[0].fqdn}"
 }
 
 output "backend_url" {
-  value = "https://${azurerm_container_app.backend.latest_revision_fqdn}"
+  value = "https://${azurerm_container_app.backend.ingress[0].fqdn}"
 }
