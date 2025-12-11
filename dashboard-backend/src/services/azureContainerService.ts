@@ -30,6 +30,10 @@ class AzureContainerService {
     this.ensureAzureCLI();
   }
 
+  private isLocalMode(): boolean {
+    return process.env.DEPLOYMENT_MODE === 'docker' || !process.env.AZURE_RESOURCE_GROUP;
+  }
+
   private async ensureAzureCLI(): Promise<void> {
     try {
       // Vérifier que Azure CLI est installé

@@ -12,7 +12,7 @@ resource "azurerm_container_app" "backend" {
   template {
     container {
       name   = "backend"
-      image  = "${azurerm_container_registry.main.login_server}/dashboard-backend:azure-delegation"
+      image  = "${azurerm_container_registry.main.login_server}/dashboard-backend:real-azure-msi"
       cpu    = 0.5
       memory = "1Gi"
 
