@@ -9,7 +9,9 @@ Write-Host "=== DEPLOIEMENT PORTAIL CLOUD ===" -ForegroundColor Cyan
 $account = az account show --output json 2>$null | ConvertFrom-Json
 if (-not $account) { az login; $account = az account show --output json | ConvertFrom-Json }
 $uniqueId = ($account.user.name -replace '[^a-zA-Z0-9]', '').ToLower().Substring(0, 8)
+$subscriptionId = $account.id
 Write-Host "ID unique: $uniqueId" -ForegroundColor Green
+Write-Host "Subscription: $subscriptionId" -ForegroundColor Green
 
 # Nettoyage si demande
 if ($Clean) {
