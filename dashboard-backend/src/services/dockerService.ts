@@ -429,6 +429,28 @@ class DockerService {
 
   // Créer un service prédéfini pour un client avec gestion Docker réelle
   async createPredefinedService(clientId: string, serviceType: 'nginx' | 'nodejs' | 'python' | 'database'): Promise<{ containerId: string; url: string; port: number }> {
+    // Si on est en environnement Azure, déléguer à azureContainerService
+    if (this.isAzureEnvironment) {
+      logger.info(`Creating ${serviceType} service via Azure Container Service for client ${clientId}`);
+      const container = await azureContainerService.createContainer({
+        name: `${serviceType}-service`,
+        image: '', // L'image sera choisie automatiquement par getImageForServiceType
+        cmd: [],
+        ports: [],
+        environment: {},
+        clientId,
+        serviceType,
+        labels: {}
+      }, clientId);
+      
+      return {
+        containerId: container.id,
+        url: container.url || '',
+        port: 80
+      };
+    }
+    
+    // Mode local Docker (ancien code)
     const timestamp = Date.now();
     const serviceConfigs = {
       nginx: {

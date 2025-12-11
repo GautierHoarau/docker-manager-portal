@@ -273,33 +273,35 @@ class AzureContainerService {
 
   async startContainer(containerId: string): Promise<void> {
     try {
-      logger.info(`Starting Azure Container App: ${containerId}`);
+      logger.info(`Starting Azure Container App (INGRESS ENABLE): ${containerId}`);
       
-      const result = await databaseService.query('SELECT azure_app_name FROM user_containers WHERE container_id = $1', [containerId]);
+      const result = await databaseService.query('SELECT azure_app_name, service_type FROM user_containers WHERE container_id = $1', [containerId]);
       if (result.rows.length === 0) {
         throw new Error('Container not found');
       }
       
       const azureAppName = result.rows[0].azure_app_name;
+      const serviceType = result.rows[0].service_type;
+      const targetPort = this.getTargetPort(serviceType);
       
-      // Démarrer le Container App Azure (s'assurer qu'il a au moins 1 replica)
-      await this.runAzureCommand(`az containerapp update --name ${azureAppName} --resource-group ${this.resourceGroup} --min-replicas 1 --max-replicas 1`);
+      // SIMPLE : Réactiver l'ingress
+      await this.runAzureCommand(`az containerapp ingress enable --name ${azureAppName} --resource-group ${this.resourceGroup} --type external --target-port ${targetPort}`);
       
       await databaseService.query(
         'UPDATE user_containers SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE container_id = $2',
         ['running', containerId]
       );
       
-      logger.info(`Azure Container App started: ${containerId}`);
+      logger.info(`Azure Container App INGRESS ENABLED: ${containerId}`);
     } catch (error: any) {
-      logger.error('Error starting container:', error);
+      logger.error('Error enabling ingress:', error);
       throw new Error(`Failed to start container: ${error.message}`);
     }
   }
 
   async stopContainer(containerId: string): Promise<void> {
     try {
-      logger.info(`Stopping Azure Container App: ${containerId}`);
+      logger.info(`Stopping Azure Container App (INGRESS DISABLE): ${containerId}`);
       
       const result = await databaseService.query('SELECT azure_app_name FROM user_containers WHERE container_id = $1', [containerId]);
       if (result.rows.length === 0) {
@@ -308,17 +310,17 @@ class AzureContainerService {
       
       const azureAppName = result.rows[0].azure_app_name;
       
-      // Arrêter le Container App Azure en mettant min-replicas à 0 mais max-replicas à 1 (minimum requis par Azure)
-      await this.runAzureCommand(`az containerapp update --name ${azureAppName} --resource-group ${this.resourceGroup} --min-replicas 0 --max-replicas 1`);
+      // SIMPLE : Désactiver juste l'ingress (rend l'URL inaccessible)
+      await this.runAzureCommand(`az containerapp ingress disable --name ${azureAppName} --resource-group ${this.resourceGroup}`);
       
       await databaseService.query(
         'UPDATE user_containers SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE container_id = $2',
         ['exited', containerId]
       );
       
-      logger.info(`Azure Container App stopped: ${containerId}`);
+      logger.info(`Azure Container App INGRESS DISABLED: ${containerId}`);
     } catch (error: any) {
-      logger.error('Error stopping container:', error);
+      logger.error('Error disabling ingress:', error);
       throw new Error(`Failed to stop container: ${error.message}`);
     }
   }
@@ -448,24 +450,26 @@ ${new Date().toISOString()} Status: Check Azure Portal for real-time status`;
       return customImage;
     }
     
-    // Utiliser des images avec serveurs web qui fonctionnent directement
+    // Utiliser des images du registry avec nom dynamique basé sur l'environnement
+    const registryServer = this.registryServer; // acrbastienr.azurecr.io par exemple
+    
     switch (serviceType) {
       case 'nginx':
-        return 'nginx:alpine';
+        return `${registryServer}/nginx-demo:latest`;
       case 'apache':
         return 'httpd:alpine';
       case 'nodejs':
-        return 'nginx:alpine'; // Temporairement nginx jusqu'à ce qu'on ait une vraie image Node.js
+        return `${registryServer}/nodejs-demo:latest`;
       case 'python':
-        return 'nginx:alpine'; // Temporairement nginx jusqu'à ce qu'on ait une vraie image Python
+        return `${registryServer}/python-demo:latest`;
       case 'redis':
         return 'redis:alpine';
       case 'postgres':
         return 'postgres:15-alpine';
       case 'database':
-        return 'postgres:15-alpine';
+        return `${registryServer}/database-demo:latest`;
       default:
-        return customImage || 'nginx:alpine'; // Fallback sur nginx
+        return customImage || `${registryServer}/nginx-demo:latest`; // Fallback sur nginx-demo
     }
   }
 

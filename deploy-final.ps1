@@ -40,14 +40,14 @@ Pop-Location
 Write-Host "Registry: $acrServer" -ForegroundColor Green
 Write-Host "Groupe: $rgName" -ForegroundColor Green
 
-# Phase 2: Images Docker (Backend unified + Frontend)
-Write-Host "`nPhase 2: Déploiement des images unifiées..." -ForegroundColor Yellow
+# Phase 2: Images Docker (Backend, Frontend + Applications complètes)
+Write-Host "`nPhase 2: Construction COMPLÈTE de toutes les images..." -ForegroundColor Yellow
 az acr login --name $acrName
 
 # Build and push the real Azure integration backend
 Write-Host "  Construction du backend avec intégration Azure réelle..." -ForegroundColor White
 docker build -t "$acrServer/dashboard-backend:real-azure-msi" ./dashboard-backend
-Write-Host "  Poussée du backend avec intégration Azure réelle..." -ForegroundColor White
+Write-Host "  Poussée du backend..." -ForegroundColor White
 docker push "$acrServer/dashboard-backend:real-azure-msi"
 
 # Build and push frontend avec l'URL backend correcte
@@ -57,6 +57,21 @@ $backendUrl = "https://backend-${uniqueId}.${containerAppDomain}/api"
 docker build --build-arg NEXT_PUBLIC_API_URL="$backendUrl" -t "$acrServer/dashboard-frontend:latest" ./dashboard-frontend
 Write-Host "  Poussée du frontend avec URL: $backendUrl" -ForegroundColor White
 docker push "$acrServer/dashboard-frontend:latest"
+
+# Build and push application demo images
+Write-Host "  Construction des images d'applications..." -ForegroundColor White
+
+Write-Host "    Node.js Demo App..." -ForegroundColor Gray
+docker build -t "$acrServer/nodejs-demo:latest" ./docker-images/nodejs-demo
+docker push "$acrServer/nodejs-demo:latest"
+
+Write-Host "    Python Demo App..." -ForegroundColor Gray  
+docker build -t "$acrServer/python-demo:latest" ./docker-images/python-demo
+docker push "$acrServer/python-demo:latest"
+
+Write-Host "    Database Demo..." -ForegroundColor Gray
+docker build -t "$acrServer/database-demo:latest" ./docker-images/database-demo  
+docker push "$acrServer/database-demo:latest"
 
 Write-Host "✓ Images déployées (backend avec intégration Azure réelle)" -ForegroundColor Green
 
