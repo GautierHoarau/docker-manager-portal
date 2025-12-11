@@ -91,6 +91,10 @@ Write-Host "    Database Demo..." -ForegroundColor Gray
 docker build -t "$acrServer/database-demo:latest" ./docker-images/database-demo  
 docker push "$acrServer/database-demo:latest"
 
+Write-Host "    Nginx Demo App..." -ForegroundColor Gray
+docker build -t "$acrServer/nginx-demo:latest" ./docker-images/nginx-demo
+docker push "$acrServer/nginx-demo:latest"
+
 Write-Host "✓ Images déployées (backend avec intégration Azure réelle)" -ForegroundColor Green
 
 # Phase 3: Container Apps avec récupération fiable des URLs
@@ -146,6 +150,22 @@ try {
     }
 }
 Pop-Location
+
+# Configuration MSI et permissions pour le backend
+Write-Host "`nConfiguration MSI et permissions..." -ForegroundColor Yellow
+Write-Host "Activation MSI pour le backend..." -ForegroundColor White
+az containerapp identity assign --name "backend-$uniqueId" --resource-group $rgName --system-assigned 2>$null | Out-Null
+
+# Récupération du Principal ID pour les permissions
+$identityInfo = az containerapp show --name "backend-$uniqueId" --resource-group $rgName --query "identity" 2>$null | ConvertFrom-Json
+if ($identityInfo -and $identityInfo.principalId) {
+    $principalId = $identityInfo.principalId
+    Write-Host "Attribution des permissions Contributor..." -ForegroundColor White
+    az role assignment create --assignee $principalId --role "Contributor" --scope "/subscriptions/$subscriptionId/resourceGroups/$rgName" 2>$null | Out-Null
+    Write-Host "✓ MSI et permissions configurées" -ForegroundColor Green
+} else {
+    Write-Host "⚠ Erreur MSI, les containers pourraient ne pas fonctionner" -ForegroundColor Yellow
+}
 
 if ($backendUrl -and $frontendUrl) {
     Write-Host "  Backend:  $backendUrl" -ForegroundColor Gray
