@@ -485,7 +485,7 @@ class DockerService {
     
     logger.info(`Creating ${serviceType} service config: ${JSON.stringify(config, null, 2)}`);
     
-    // Créer le container avec Docker réel
+    // Créer le container
     const containerId = await this.createContainer({
       name: config.name,
       image: config.image,
@@ -501,19 +501,30 @@ class DockerService {
       }
     });
 
-    // Démarrer le container
-    await this.startContainer(containerId);
-    
-    // Récupérer le port mappé réellement par Docker (seulement en local)
-    let mappedPort = 8000 + Math.floor(Math.random() * 1000);
-    if (this.docker) {
-      const containers = await this.docker.listContainers();
-      const containerInfo = containers.find((c: any) => c.Id.startsWith(containerId));
-      mappedPort = containerInfo?.Ports?.find((p: any) => p.PrivatePort === 80)?.PublicPort || mappedPort;
+    // Démarrer le container (seulement en mode local Docker)
+    // En Azure, le container est déjà démarré par createContainer
+    if (!this.isAzureEnvironment) {
+      await this.startContainer(containerId);
     }
     
-    // Générer l'URL unique avec le vrai port
-    const url = `http://${clientId}-${serviceType}.localhost:${mappedPort}`;
+    // Générer l'URL et port selon l'environnement
+    let mappedPort: number;
+    let url: string;
+    
+    if (this.isAzureEnvironment) {
+      // En Azure, pas de port mappé, utilisation de l'URL Azure Container Apps
+      mappedPort = 443; // HTTPS par défaut pour Azure
+      url = `https://app-${config.name.replace(/[^a-z0-9-]/g, '-').toLowerCase()}.${process.env.AZURE_RESOURCE_GROUP_REGION || 'francecentral'}.azurecontainerapps.io`;
+    } else {
+      // En local Docker, récupérer le port mappé réellement
+      mappedPort = 8000 + Math.floor(Math.random() * 1000);
+      if (this.docker) {
+        const containers = await this.docker.listContainers();
+        const containerInfo = containers.find((c: any) => c.Id.startsWith(containerId));
+        mappedPort = containerInfo?.Ports?.find((p: any) => p.PrivatePort === 80)?.PublicPort || mappedPort;
+      }
+      url = `http://${clientId}-${serviceType}.localhost:${mappedPort}`;
+    }
 
     logger.info(`Service ${serviceType} créé pour client ${clientId}: ${url}`);
 

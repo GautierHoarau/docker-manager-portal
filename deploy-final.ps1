@@ -44,16 +44,18 @@ Write-Host "Groupe: $rgName" -ForegroundColor Green
 Write-Host "`nPhase 2: Déploiement des images unifiées..." -ForegroundColor Yellow
 az acr login --name $acrName
 
-# Use the unified backend image we just built
-Write-Host "  Poussée du backend unifié (DB complète)..." -ForegroundColor White
-docker push "$acrServer/dashboard-backend:unified-db"
+# Build and push the real Azure integration backend
+Write-Host "  Construction du backend avec intégration Azure réelle..." -ForegroundColor White
+docker build -t "$acrServer/dashboard-backend:real-azure-msi" ./dashboard-backend
+Write-Host "  Poussée du backend avec intégration Azure réelle..." -ForegroundColor White
+docker push "$acrServer/dashboard-backend:real-azure-msi"
 
 # Build and push frontend  
 Write-Host "  Construction et poussée du frontend..." -ForegroundColor White
 docker build -t "$acrServer/dashboard-frontend:latest" ./dashboard-frontend
 docker push "$acrServer/dashboard-frontend:latest"
 
-Write-Host "✓ Images unifiées déployées (backend avec DB complète)" -ForegroundColor Green
+Write-Host "✓ Images déployées (backend avec intégration Azure réelle)" -ForegroundColor Green
 
 # Phase 3: Container Apps avec récupération fiable des URLs
 Write-Host "`nPhase 3: Container Apps..." -ForegroundColor Yellow

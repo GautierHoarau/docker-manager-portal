@@ -21,6 +21,9 @@ provider "azurerm" {
   features {}
 }
 
+# Data sources
+data "azurerm_client_config" "current" {}
+
 # Variables
 variable "unique_id" {
   description = "Identifiant unique pour les noms des ressources"

@@ -20,8 +20,15 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine AS production
 
-# Install dumb-init, wget and docker for proper signal handling and container management
-RUN apk add --no-cache dumb-init wget docker
+# Install dependencies including build tools for Azure CLI
+RUN apk add --no-cache dumb-init wget docker curl bash py3-pip python3 \
+    gcc python3-dev musl-dev linux-headers libffi-dev openssl-dev
+
+# Install Azure CLI in virtual environment
+RUN python3 -m venv /opt/azure-cli && \
+    /opt/azure-cli/bin/pip install --upgrade pip && \
+    /opt/azure-cli/bin/pip install azure-cli && \
+    ln -s /opt/azure-cli/bin/az /usr/local/bin/az
 
 # Create app user for security and add to docker group
 RUN addgroup -g 1001 -S nodejs && \

@@ -5,10 +5,14 @@ resource "azurerm_container_app" "backend" {
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
 
+  identity {
+    type = "SystemAssigned"
+  }
+
   template {
     container {
       name   = "backend"
-      image  = "${azurerm_container_registry.main.login_server}/dashboard-backend:unified-db"
+      image  = "${azurerm_container_registry.main.login_server}/dashboard-backend:real-azure-msi"
       cpu    = 0.5
       memory = "1Gi"
 
@@ -34,7 +38,47 @@ resource "azurerm_container_app" "backend" {
       
       env {
         name  = "FRONTEND_URL"
-        value = "*"
+        value = "https://frontend-${var.unique_id}.delightfulflower-c37029b5.francecentral.azurecontainerapps.io"
+      }
+
+      env {
+        name  = "AZURE_RESOURCE_GROUP"
+        value = azurerm_resource_group.main.name
+      }
+
+      env {
+        name  = "AZURE_CONTAINER_ENVIRONMENT"
+        value = azurerm_container_app_environment.main.name
+      }
+
+      env {
+        name  = "AZURE_CONTAINER_REGISTRY"
+        value = azurerm_container_registry.main.login_server
+      }
+
+      env {
+        name  = "AZURE_CONTAINER_REGISTRY_USERNAME"
+        value = azurerm_container_registry.main.admin_username
+      }
+
+      env {
+        name  = "AZURE_ENVIRONMENT"
+        value = "true"
+      }
+
+      env {
+        name  = "AZURE_CONTAINER_REGISTRY_PASSWORD"
+        value = azurerm_container_registry.main.admin_password
+      }
+
+      env {
+        name  = "AZURE_SUBSCRIPTION_ID"
+        value = data.azurerm_client_config.current.subscription_id
+      }
+
+      env {
+        name  = "AZURE_USE_MSI"
+        value = "true"
       }
     }
 
@@ -88,7 +132,7 @@ resource "azurerm_container_app" "frontend" {
 
       env {
         name  = "NEXT_PUBLIC_API_URL"
-        value = "*"
+        value = "https://backend-${var.unique_id}.delightfulflower-c37029b5.francecentral.azurecontainerapps.io"
       }
 
       env {
@@ -126,6 +170,19 @@ resource "azurerm_container_app" "frontend" {
     ManagedBy   = "Terraform"
   }
 }
+
+# Note: Les rôles seront assignés manuellement après le déploiement initial
+# resource "azurerm_role_assignment" "backend_contributor" {
+#   scope                = azurerm_resource_group.main.id
+#   role_definition_name = "Contributor"
+#   principal_id         = azurerm_container_app.backend.identity[0].principal_id
+# }
+
+# resource "azurerm_role_assignment" "backend_container_registry_pull" {
+#   scope                = azurerm_container_registry.main.id
+#   role_definition_name = "AcrPull"
+#   principal_id         = azurerm_container_app.backend.identity[0].principal_id
+# }
 
 # Outputs
 output "frontend_url" {
