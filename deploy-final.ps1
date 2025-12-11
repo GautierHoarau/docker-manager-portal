@@ -96,24 +96,32 @@ Write-Host "✓ Images déployées (backend avec intégration Azure réelle)" -F
 # Phase 3: Container Apps avec récupération fiable des URLs
 Write-Host "`nPhase 3: Container Apps..." -ForegroundColor Yellow
 Push-Location terraform\azure
+
+# Vérifier les container apps existants (préservation des URLs)
+Write-Host "Vérification des container apps existants..." -ForegroundColor Gray
+$existingBackend = az containerapp show --name "backend-$uniqueId" --resource-group $rgName 2>$null
+$existingFrontend = az containerapp show --name "frontend-$uniqueId" --resource-group $rgName 2>$null
+
+if ($existingBackend -or $existingFrontend) {
+    Write-Host "⚠ Container apps existants détectés - Les URLs seront préservées" -ForegroundColor Yellow
+    Write-Host "Note: Terraform va gérer la mise à jour automatiquement" -ForegroundColor Gray
+}
+
 terraform plan -var="unique_id=$uniqueId" -out=tfplan2
 terraform apply -auto-approve tfplan2
-Pop-Location
 
-# Phase 3.1: Récupération des URLs et rebuild frontend avec bonne URL API
-Write-Host "Récupération des URLs via Terraform outputs..." -ForegroundColor White
+# Phase 3.1: Récupération des URLs APRÈS création des container apps
+Write-Host "Récupération des URLs finales..." -ForegroundColor White
 
 # Attendre que les container apps soient complètement déployés
 Write-Host "Attente du déploiement des container apps..." -ForegroundColor Gray
-Start-Sleep 30
+Start-Sleep 45
 
-# Récupération directe des outputs Terraform avec gestion d'erreur
-Push-Location terraform\azure
+# Récupération des nouvelles URLs via Terraform outputs
 try {
     $outputs = terraform output -json | ConvertFrom-Json
     $backendUrl = $outputs.backend_url.value
     $frontendUrl = $outputs.frontend_url.value
-    Pop-Location
     
     if ($backendUrl -and $frontendUrl) {
         Write-Host "✓ URLs récupérées avec succès via Terraform:" -ForegroundColor Green
@@ -121,10 +129,9 @@ try {
         throw "URLs vides dans les outputs"
     }
 } catch {
-    Pop-Location
     Write-Host "⚠ Erreur Terraform, récupération manuelle via Azure CLI..." -ForegroundColor Yellow
     
-    # Fallback via Azure CLI
+    # Fallback via Azure CLI avec les nouvelles URLs
     $backendFqdn = az containerapp show --name "backend-$uniqueId" --resource-group $rgName --query "properties.configuration.ingress.fqdn" -o tsv 2>$null
     $frontendFqdn = az containerapp show --name "frontend-$uniqueId" --resource-group $rgName --query "properties.configuration.ingress.fqdn" -o tsv 2>$null
     
@@ -138,6 +145,7 @@ try {
         $frontendUrl = ""
     }
 }
+Pop-Location
 
 if ($backendUrl -and $frontendUrl) {
     Write-Host "  Backend:  $backendUrl" -ForegroundColor Gray
@@ -180,27 +188,19 @@ if ($backendUrl -and $frontendUrl) {
     if (-not $revisionActive) {
         Write-Host "⚠ Timeout: révision pas encore active, mais continuons..." -ForegroundColor Yellow
     }
+    
+    # Configuration CORS backend avec les vraies URLs finales
+    Write-Host "Configuration CORS backend avec les vraies URLs..." -ForegroundColor White
+    az containerapp update --name "backend-$uniqueId" --resource-group $rgName `
+        --set-env-vars "FRONTEND_URL=$frontendUrl" 2>$null | Out-Null
+    Write-Host "✓ CORS configuré: Backend autorise $frontendUrl" -ForegroundColor Green
 } else {
     Write-Host "❌ Erreur: URLs non trouvées, le frontend utilisera localhost en fallback" -ForegroundColor Red
     $backendUrl = ""
     $frontendUrl = ""
 }
 
-# Phase 4: Configuration CORS et variables d'environnement
-Write-Host "`nPhase 4: Configuration CORS et variables..." -ForegroundColor Yellow
-
-if ($backendUrl -and $frontendUrl) {
-    Write-Host "Configuration CORS backend..." -ForegroundColor White
-    
-    # Configuration du backend avec FRONTEND_URL pour CORS uniquement
-    az containerapp update --name "backend-$uniqueId" --resource-group $rgName `
-        --set-env-vars "FRONTEND_URL=$frontendUrl" 2>$null | Out-Null
-        
-    Write-Host "✓ Configuration CORS appliquée" -ForegroundColor Green
-    
-    # Attente courte pour la configuration CORS
-    Start-Sleep 10
-}
+# Configuration CORS déjà faite après le rebuild du frontend
 
 # Phase 6: Initialisation COMPLÈTE de la base de données (UNIFIED)
 Write-Host "`nPhase 6: Initialisation unifiée de la base de données..." -ForegroundColor Yellow
