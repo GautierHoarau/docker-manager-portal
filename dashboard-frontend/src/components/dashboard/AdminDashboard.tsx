@@ -75,7 +75,7 @@ export default function AdminDashboard() {
     }
 
     try {
-      await api.post(`/api/admin/containers/${containerId}/${action}`);
+      await api.post(`/admin/containers/${containerId}/${action}`);
       loadAdminData(); // Refresh data
     } catch (error) {
       console.error(`Failed to ${action} container:`, error);
