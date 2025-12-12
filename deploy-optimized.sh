@@ -190,20 +190,98 @@ EOF
         log "Installation d'Azure CLI..."
         case $SYSTEM in
             "windows")
-                warn "Azure CLI non trouvé. Installé manuellement depuis: https://aka.ms/installazurecliwindows"
-                warn "Ou utilisez: winget install Microsoft.AzureCLI"
+                log "Tentative d'installation automatique d'Azure CLI sur Windows..."
+                
+                # Essayer winget d'abord (Windows 10+ moderne)
+                if command -v winget.exe &> /dev/null; then
+                    log "Installation via winget..."
+                    winget.exe install Microsoft.AzureCLI --silent --accept-source-agreements --accept-package-agreements 2>/dev/null || {
+                        warn "Installation winget échouée, essai avec PowerShell..."
+                        
+                        # Fallback: installation via PowerShell et MSI
+                        powershell.exe -Command "
+                            try {
+                                Write-Host 'Téléchargement Azure CLI MSI...'
+                                \$ProgressPreference = 'SilentlyContinue'
+                                Invoke-WebRequest -Uri 'https://aka.ms/installazurecliwindows' -OutFile '\$env:TEMP\\azure-cli.msi'
+                                Write-Host 'Installation Azure CLI...'
+                                Start-Process msiexec.exe -Wait -ArgumentList '/i', '\$env:TEMP\\azure-cli.msi', '/quiet', '/norestart'
+                                Remove-Item '\$env:TEMP\\azure-cli.msi' -Force -ErrorAction SilentlyContinue
+                                Write-Host 'Azure CLI installé avec succès'
+                            } catch {
+                                Write-Error \"Erreur d'installation: \$(\$_.Exception.Message)\"
+                            }
+                        " || warn "Installation PowerShell échouée"
+                    }
+                else
+                    # Fallback direct avec PowerShell
+                    log "Installation via PowerShell (MSI)..."
+                    powershell.exe -Command "
+                        try {
+                            Write-Host 'Téléchargement Azure CLI MSI...'
+                            \$ProgressPreference = 'SilentlyContinue'
+                            Invoke-WebRequest -Uri 'https://aka.ms/installazurecliwindows' -OutFile '\$env:TEMP\\azure-cli.msi'
+                            Write-Host 'Installation Azure CLI...'
+                            Start-Process msiexec.exe -Wait -ArgumentList '/i', '\$env:TEMP\\azure-cli.msi', '/quiet', '/norestart'
+                            Remove-Item '\$env:TEMP\\azure-cli.msi' -Force -ErrorAction SilentlyContinue
+                            Write-Host 'Azure CLI installé avec succès'
+                        } catch {
+                            Write-Error \"Erreur d'installation: \$(\$_.Exception.Message)\"
+                        }
+                    "
+                fi
+                
+                # Recharger le PATH pour détecter az
+                export PATH="/c/Program Files (x86)/Microsoft SDKs/Azure/CLI2/wbin:$PATH"
+                export PATH="/c/Program Files/Microsoft SDKs/Azure/CLI2/wbin:$PATH"
                 ;;
             "linux")
-                curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                log "Installation Azure CLI sur Linux..."
+                if command -v apt-get &> /dev/null; then
+                    # Ubuntu/Debian
+                    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+                elif command -v yum &> /dev/null; then
+                    # RHEL/CentOS
+                    sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+                    sudo sh -c 'echo -e "[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc" > /etc/yum.repos.d/azure-cli.repo'
+                    sudo yum install azure-cli
+                elif command -v dnf &> /dev/null; then
+                    # Fedora
+                    sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
+                    sudo dnf install -y azure-cli
+                else
+                    # Fallback: installation manuelle via curl
+                    curl -L https://aka.ms/InstallAzureCli | bash
+                fi
                 ;;
             "macos")
                 if command -v brew &> /dev/null; then
+                    log "Installation Azure CLI via Homebrew..."
                     brew install azure-cli
                 else
+                    log "Installation Azure CLI via script..."
                     curl -L https://aka.ms/InstallAzureCli | bash
                 fi
                 ;;
         esac
+        
+        # Vérification post-installation
+        if command -v az &> /dev/null; then
+            success "Azure CLI installé avec succès ($(az version --query '"azure-cli"' -o tsv 2>/dev/null || echo 'version inconnue'))"
+        else
+            warn "Installation automatique échouée. Installez manuellement:"
+            case $SYSTEM in
+                "windows") warn "  https://aka.ms/installazurecliwindows" ;;
+                "linux") warn "  curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash" ;;
+                "macos") warn "  brew install azure-cli" ;;
+            esac
+            error "Azure CLI est requis pour continuer"
+        fi
     else
         success "Azure CLI déjà installé ($(az version --query '"azure-cli"' -o tsv 2>/dev/null || echo 'version inconnue'))"
     fi
@@ -266,6 +344,59 @@ UNIQUE_ID=$(echo "$USER_NAME" | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]' 
 RG_NAME="rg-container-manager-$UNIQUE_ID"
 
 success "ID unique: $UNIQUE_ID | Subscription: $SUBSCRIPTION_ID"
+
+# ===========================
+# PHASE 0.5: VÉRIFICATION ET ENREGISTREMENT DES PROVIDERS AZURE
+# ===========================
+log "Vérification des providers Azure requis..."
+
+# Liste des providers requis pour ce déploiement
+REQUIRED_PROVIDERS=(
+    "Microsoft.App"
+    "Microsoft.ContainerRegistry" 
+    "Microsoft.ContainerService"
+    "Microsoft.OperationalInsights"
+    "Microsoft.DBforPostgreSQL"
+)
+
+# Vérification et enregistrement automatique des providers
+for provider in "${REQUIRED_PROVIDERS[@]}"; do
+    log "Vérification du provider $provider..."
+    
+    # Vérifier le statut du provider
+    PROVIDER_STATUS=$(az provider show --namespace "$provider" --query "registrationState" -o tsv 2>/dev/null || echo "NotFound")
+    
+    if [ "$PROVIDER_STATUS" != "Registered" ]; then
+        warn "Provider $provider non enregistré (statut: $PROVIDER_STATUS)"
+        log "Enregistrement du provider $provider..."
+        
+        # Enregistrer le provider
+        az provider register --namespace "$provider" --wait 2>/dev/null || {
+            warn "Impossible d'enregistrer automatiquement $provider"
+            warn "Enregistrement en arrière-plan..."
+            az provider register --namespace "$provider" 2>/dev/null || true
+        }
+        
+        # Vérifier le nouveau statut
+        NEW_STATUS=$(az provider show --namespace "$provider" --query "registrationState" -o tsv 2>/dev/null || echo "Unknown")
+        if [ "$NEW_STATUS" = "Registered" ]; then
+            success "Provider $provider enregistré avec succès"
+        elif [ "$NEW_STATUS" = "Registering" ]; then
+            warn "Provider $provider en cours d'enregistrement..."
+            success "L'enregistrement se poursuivra en arrière-plan"
+        else
+            warn "Statut du provider $provider: $NEW_STATUS"
+        fi
+    else
+        success "Provider $provider déjà enregistré"
+    fi
+done
+
+# Attendre un peu pour laisser les providers s'enregistrer
+log "Attente de la finalisation des enregistrements (10s)..."
+sleep 10
+
+success "✅ Vérification des providers terminée"
 
 # ===========================
 # PHASE 1: CLEANUP (IF REQUESTED)

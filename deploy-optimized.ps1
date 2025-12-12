@@ -31,6 +31,46 @@ Log "🚀 DÉPLOIEMENT PORTAIL CLOUD OPTIMISÉ"
 # ===========================
 Log "Phase 0: Configuration initiale"
 
+# Vérification et installation d'Azure CLI si nécessaire
+if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+    Log "Installation d'Azure CLI..."
+    
+    # Essayer winget d'abord
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            winget install Microsoft.AzureCLI --silent --accept-source-agreements --accept-package-agreements
+            Success "Azure CLI installé via winget"
+        } catch {
+            Warn "Installation winget échouée, essai PowerShell..."
+            
+            # Fallback MSI
+            try {
+                $msiPath = "$env:TEMP\azure-cli.msi"
+                Invoke-WebRequest -Uri 'https://aka.ms/installazurecliwindows' -OutFile $msiPath
+                Start-Process msiexec.exe -Wait -ArgumentList '/i', $msiPath, '/quiet', '/norestart'
+                Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
+                Success "Azure CLI installé via MSI"
+            } catch {
+                Error "Impossible d'installer Azure CLI automatiquement. Installez manuellement: https://aka.ms/installazurecliwindows"
+            }
+        }
+    } else {
+        # Installation MSI directe
+        try {
+            $msiPath = "$env:TEMP\azure-cli.msi"
+            Invoke-WebRequest -Uri 'https://aka.ms/installazurecliwindows' -OutFile $msiPath
+            Start-Process msiexec.exe -Wait -ArgumentList '/i', $msiPath, '/quiet', '/norestart'
+            Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
+            Success "Azure CLI installé via MSI"
+        } catch {
+            Error "Impossible d'installer Azure CLI automatiquement. Installez manuellement: https://aka.ms/installazurecliwindows"
+        }
+    }
+    
+    # Recharger le PATH
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+}
+
 $account = az account show --output json 2>$null | ConvertFrom-Json
 if (-not $account) { 
     Log "Connexion Azure requise..."
@@ -43,6 +83,44 @@ $subscriptionId = $account.id
 $rgName = "rg-container-manager-$uniqueId"
 
 Success "ID unique: $uniqueId | Subscription: $subscriptionId"
+
+# ===========================
+# PHASE 0.5: VÉRIFICATION DES PROVIDERS AZURE
+# ===========================
+Log "Vérification des providers Azure requis..."
+
+$requiredProviders = @(
+    "Microsoft.App",
+    "Microsoft.ContainerRegistry", 
+    "Microsoft.ContainerService",
+    "Microsoft.OperationalInsights",
+    "Microsoft.DBforPostgreSQL"
+)
+
+foreach ($provider in $requiredProviders) {
+    Log "Vérification du provider $provider..."
+    
+    $providerStatus = az provider show --namespace $provider --query "registrationState" -o tsv 2>$null
+    
+    if ($providerStatus -ne "Registered") {
+        Warn "Provider $provider non enregistré (statut: $providerStatus)"
+        Log "Enregistrement du provider $provider..."
+        
+        try {
+            az provider register --namespace $provider --wait 2>$null | Out-Null
+            Success "Provider $provider enregistré avec succès"
+        } catch {
+            Warn "Enregistrement en arrière-plan du provider $provider..."
+            az provider register --namespace $provider 2>$null | Out-Null
+        }
+    } else {
+        Success "Provider $provider déjà enregistré"
+    }
+}
+
+Log "Attente de la finalisation des enregistrements (10s)..."
+Start-Sleep 10
+Success "✅ Vérification des providers terminée"
 
 # ===========================
 # PHASE 1: CLEANUP (IF REQUESTED)
